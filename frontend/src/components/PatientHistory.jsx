@@ -1,50 +1,72 @@
 import React from 'react';
 
 export default function PatientHistory() {
-  // Örnek mock veriler (Veritabanından gelecek olan)
-  const patients = [
-    { id: 'TRJ-001', name: 'Ahmet Yılmaz', date: '17.10.2026', time: '14:30', priority: 1 },
-    { id: 'TRJ-002', name: 'Ayşe Demir', date: '17.10.2026', time: '14:45', priority: 3 },
-    { id: 'TRJ-003', name: 'Mehmet Kaya', date: '17.10.2026', time: '15:10', priority: 5 },
-    { id: 'TRJ-004', name: 'Fatma Şahin', date: '17.10.2026', time: '15:25', priority: 2 },
+  // Örnek sahte veriler (İleride DB'den gelecek)
+  const mockPatients = [
+    { id: '1001', name: 'John Doe', date: '2026-10-17', time: '14:30', priority: 'High' },
+    { id: '1002', name: 'Jane Smith', date: '2026-10-17', time: '15:15', priority: 'Medium' },
+    { id: '1003', name: 'Alice Johnson', date: '2026-10-16', time: '09:45', priority: 'Low' },
   ];
 
-  const getPriorityColor = (priority) => {
-    if(priority === 1) return 'bg-red-100 text-red-700 border-red-200';
-    if(priority === 2 || priority === 3) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-    return 'bg-green-100 text-green-700 border-green-200';
+  const handleEditClick = (id) => {
+    // İleride bu fonksiyon, seçilen hastanın verilerini çekip 
+    // Triage Entry formuna yerleştirmek için kullanılacak.
+    console.log(`Editing patient with ID: ${id}`);
+    alert(`Edit mode activated for Patient ID: ${id}. (Routing will be implemented later)`);
   };
 
   return (
-    <div className="w-full max-w-6xl">
-      <h2 className="text-2xl font-bold text-slate-800 mb-6">Hasta Geçmişi (Son 24 Saat)</h2>
-      <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-        <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="p-4 font-semibold text-slate-600">ID</th>
-              <th className="p-4 font-semibold text-slate-600">Hasta İsim Soyisim</th>
-              <th className="p-4 font-semibold text-slate-600">Tarih</th>
-              <th className="p-4 font-semibold text-slate-600">Saat</th>
-              <th className="p-4 font-semibold text-slate-600">Öncelik Derecesi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {patients.map((patient) => (
-              <tr key={patient.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="p-4 text-slate-500 font-mono">{patient.id}</td>
-                <td className="p-4 font-medium text-slate-800">{patient.name}</td>
-                <td className="p-4 text-slate-600">{patient.date}</td>
-                <td className="p-4 text-slate-600">{patient.time}</td>
-                <td className="p-4">
-                  <span className={`px-3 py-1 rounded-full text-sm font-semibold border ${getPriorityColor(patient.priority)}`}>
-                    Skor: {patient.priority}
-                  </span>
-                </td>
+    <div className="p-6 flex flex-col items-center min-h-screen">
+      <div className="w-full max-w-6xl bg-white rounded-3xl p-6 shadow-sm border border-slate-200">
+        <h2 className="text-2xl font-semibold text-slate-800 mb-6">Patient History</h2>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-100 text-slate-600 text-sm uppercase tracking-wider border-b border-slate-200">
+                <th className="p-4 font-semibold rounded-tl-xl">ID</th>
+                <th className="p-4 font-semibold">Full Name</th>
+                <th className="p-4 font-semibold">Date</th>
+                <th className="p-4 font-semibold">Time</th>
+                <th className="p-4 font-semibold">Priority</th>
+                <th className="p-4 font-semibold text-center rounded-tr-xl">Action</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="text-slate-700 divide-y divide-slate-100">
+              {mockPatients.map((patient) => (
+                <tr key={patient.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-4 font-medium">{patient.id}</td>
+                  <td className="p-4">{patient.name}</td>
+                  <td className="p-4">{patient.date}</td>
+                  <td className="p-4">{patient.time}</td>
+                  <td className="p-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                      patient.priority === 'High' ? 'bg-red-100 text-red-700' :
+                      patient.priority === 'Medium' ? 'bg-orange-100 text-orange-700' :
+                      'bg-green-100 text-green-700'
+                    }`}>
+                      {patient.priority}
+                    </span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <button 
+                      onClick={() => handleEditClick(patient.id)}
+                      className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                    >
+                      Edit
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {mockPatients.length === 0 && (
+          <div className="p-8 text-center text-slate-500 bg-slate-50 rounded-xl mt-4 border border-slate-100">
+            No patient history found.
+          </div>
+        )}
       </div>
     </div>
   );

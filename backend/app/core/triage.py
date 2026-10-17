@@ -1,19 +1,18 @@
-"""Acil Servis Ön Triaj Karar Motoru (AI Master Prompt + NEWS2 / Klinik Kural Güvencesi).
+"""Acil Servis Ön Triaj Karar Motoru (Evrensel LLM İstemcisi + NEWS2 / Klinik Kural Güvencesi).
 
 Bu modül:
-1. 4 Kart verisini Master Prompt ile işler (Google Gemini / IBM watsonx.ai).
+1. 4 Kart verisini Master Prompt ile işler (Dilediğiniz herhangi bir LLM: OpenAI, DeepSeek, Groq, Gemini, Watsonx, Ollama vb.).
 2. Vitallerden NEWS2 klinik bozulma skorunu hesaplar.
 3. Kural ve AI sonucunu birleştirir; AI, kuralın belirlediği aciliyeti asla düşüremez (Güvenlik Kalkanı).
 """
 
-import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Any
 
-from app.core.prompts import build_full_triage_prompt
-from app.core.config import settings
+from app.core.prompts import build_full_triage_prompt, MASTER_TRIAGE_PROMPT
+from app.core.llm_client import llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ class TriajKarari:
     kritik_bulgu: str = ""
     erken_uyari_notu: str = ""
     aciklama: str = ""
-    karar_kaynagi: str = "WATSONX"
+    karar_kaynagi: str = "LLM"
     news2_skoru: int = 0
 
 
@@ -129,57 +128,8 @@ def kural_tabanli_degerlendir(istek: Any) -> tuple[str, str, int]:
     return "YESIL", "Vital bulgular stabil, acil risk saptanmadı.", toplam_news
 
 
-def _gemini_cagrisi_yap(prompt_metni: str) -> Optional[Dict[str, Any]]:
-    """Google Gemini API ile Master Prompt çağrısı yapar."""
-    api_key = getattr(settings, "gemini_api_key", None) or getattr(settings, "GEMINI_API_KEY", None)
-    if not api_key:
-        return None
-
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        yanit = model.generate_content(prompt_metni)
-        metin = yanit.text.strip()
-
-        # JSON bloğunu ayıkla
-        json_match = re.search(r"\{.*\}", metin, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group(0))
-    except Exception as e:
-        logger.warning(f"Gemini çağrısı başarısız oldu ({e}).")
-    return None
-
-
-def _watsonx_cagrisi_yap(prompt_metni: str) -> Optional[Dict[str, Any]]:
-    """IBM watsonx.ai ile Master Prompt çağrısı yapar."""
-    url = getattr(settings, "watsonx_url", None)
-    api_key = getattr(settings, "watsonx_api_key", None)
-    project_id = getattr(settings, "watsonx_project_id", None)
-
-    if not url or not api_key or not project_id:
-        return None
-
-    try:
-        from ibm_watsonx_ai import Credentials
-        from ibm_watsonx_ai.foundation_models import ModelInference
-        creds = Credentials(url=url, api_key=api_key)
-        model = ModelInference(
-            model_id=getattr(settings, "watsonx_model_id", "ibm/granite-13b-chat-v2"),
-            credentials=creds,
-            project_id=project_id,
-        )
-        response = model.generate_text(prompt=prompt_metni)
-        json_match = re.search(r"\{.*\}", response, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group(0))
-    except Exception as e:
-        logger.warning(f"watsonx çağrısı başarısız oldu ({e}).")
-    return None
-
-
 def triaj_karari_ver(istek: Any) -> TriajKarari:
-    """Master Prompt ve Klinik Kural Motorunu birleştirerek kesin triaj kararını üretir.
+    """Master Prompt ve Evrensel LLM İstemcisini birleştirerek kesin triaj kararını üretir.
     
     FastAPI uç noktasından (api/triage.py) doğrudan çağrılır:
         karar = triaj_karari_ver(istek)
@@ -190,13 +140,9 @@ def triaj_karari_ver(istek: Any) -> TriajKarari:
     # 2. Master Prompt'u Hazırla
     tam_prompt = build_full_triage_prompt(istek)
 
-    # 3. AI Çağrısını Yap (Watsonx -> Gemini fallback)
-    ai_cikti = _watsonx_cagrisi_yap(tam_prompt)
-    kaynak = "WATSONX"
-
-    if not ai_cikti:
-        ai_cikti = _gemini_cagrisi_yap(tam_prompt)
-        kaynak = "GEMINI" if ai_cikti else "KURAL"
+    # 3. Evrensel LLM Çağrısı (Herhangi bir OpenAI-uyumlu API, DeepSeek, Groq, Ollama, Gemini veya Watsonx)
+    ai_cikti = llm_client.generate(tam_prompt, MASTER_TRIAGE_PROMPT)
+    kaynak = llm_client.provider.upper() if ai_cikti else "KURAL"
 
     # 4. Sonuçları Birleştir
     if ai_cikti:
@@ -225,7 +171,7 @@ def triaj_karari_ver(istek: Any) -> TriajKarari:
             news2_skoru=news_skor,
         )
 
-    # AI çağrısı yapılamadıysa güvenli kural çıktısı dön
+    # AI çağrısı yapılamadıysa veya API anahtarı girilmediyse güvenli kural çıktısı dön
     esi_haritasi = {"KIRMIZI": 1, "SARI": 3, "YESIL": 4}
     varsayilan_poliklinik = "Kardiyoloji" if "gogus" in str(istek).lower() else "Acil Tıp"
 

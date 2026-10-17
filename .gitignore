@@ -4,3 +4,4 @@ __pycache__/
 .env
 *.py[cod]
 frontend/node_modules/
+*.xlsx

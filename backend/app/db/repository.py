@@ -13,11 +13,10 @@ logger = logging.getLogger("triage_repository")
 SQLITE_DB_PATH = "triage_local.sqlite3"
 
 def init_tables():
-    """Yerel SQLite veritabanında 4 kart ve 1 hastane log tablosunu oluşturur."""
+    """Create four intake card tables and one hospital log table in local SQLite."""
     conn = sqlite3.connect(SQLITE_DB_PATH)
     cur = conn.cursor()
-    
-    # 1. Kart Tablosu: Temel Demografi
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS TEMEL_DEMOGRAFI (
         demografi_id TEXT PRIMARY KEY,
@@ -30,8 +29,7 @@ def init_tables():
         created_at TEXT
     )
     """)
-    
-    # 2. Kart Tablosu: Tıbbi Geçmiş
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS TIBBI_GECMIS (
         tibbi_gecmis_id TEXT PRIMARY KEY,
@@ -40,8 +38,7 @@ def init_tables():
         created_at TEXT
     )
     """)
-    
-    # 3. Kart Tablosu: Anlık Vitaller
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS ANLIK_VITALLER (
         vitaller_id TEXT PRIMARY KEY,
@@ -55,8 +52,7 @@ def init_tables():
         created_at TEXT
     )
     """)
-    
-    # 4. Kart Tablosu: Hasta Şikayeti
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS HASTA_SIKAYET (
         sikayet_id TEXT PRIMARY KEY,
@@ -65,8 +61,7 @@ def init_tables():
         created_at TEXT
     )
     """)
-    
-    # 5. Tablo: Hastane Log Verisi (4 kartın kodlarını ve AI triaj kararını tutar)
+
     cur.execute("""
     CREATE TABLE IF NOT EXISTS HASTANE_LOG (
         log_id TEXT PRIMARY KEY,
@@ -85,16 +80,15 @@ def init_tables():
         created_at TEXT
     )
     """)
-    
+
     conn.commit()
     conn.close()
 
-# Tabloları başlat
 init_tables()
 
 class TriageRepository:
     """
-    4 Kartın verilerini ve 5. Hastane Log tablosunu yöneten Repository katmanı.
+    Repository layer for the four intake cards and the hospital log table.
     """
 
     @staticmethod
@@ -105,8 +99,7 @@ class TriageRepository:
         provider: str = "Google-Gemini"
     ) -> HastaneLogResponse:
         now_str = datetime.utcnow().isoformat()
-        
-        # Benzersiz ID'ler oluştur
+
         demografi_id = hasta_girdisi.demografi.id or f"DEM-{uuid.uuid4().hex[:8].upper()}"
         tibbi_gecmis_id = hasta_girdisi.tibbi_gecmis.id or f"GEC-{uuid.uuid4().hex[:8].upper()}"
         vitaller_id = hasta_girdisi.vitaller.id or f"VIT-{uuid.uuid4().hex[:8].upper()}"
@@ -115,64 +108,52 @@ class TriageRepository:
 
         uyumlu_birimler_json = json.dumps([b.dict() for b in llm_output.Birim_Uyumluluk_Siralamasi], ensure_ascii=False)
 
-        # 1. DB2 Bağlantısı varsa kaydet
         if db_manager.is_connected:
             try:
                 import ibm_db
-                # 1. Demografi
                 sql1 = "INSERT INTO TEMEL_DEMOGRAFI (DEMOGRAFI_ID, ISIM, YAS, BOY, KILO, KAN_GRUBU, KIMLIK_NO) VALUES (?, ?, ?, ?, ?, ?, ?)"
                 st1 = ibm_db.prepare(db_manager._conn, sql1)
                 ibm_db.execute(st1, (demografi_id, hasta_girdisi.demografi.isim, hasta_girdisi.demografi.yas, hasta_girdisi.demografi.boy, hasta_girdisi.demografi.kilo, hasta_girdisi.demografi.kan_grubu, hasta_girdisi.demografi.kimlik_no))
 
-                # 2. Geçmiş
                 sql2 = "INSERT INTO TIBBI_GECMIS (TIBBI_GECMIS_ID, KRONIK_RAHATSIZLIK, SUREKLI_ILAC) VALUES (?, ?, ?)"
                 st2 = ibm_db.prepare(db_manager._conn, sql2)
                 ibm_db.execute(st2, (tibbi_gecmis_id, hasta_girdisi.tibbi_gecmis.kronik_rahatsizlik, hasta_girdisi.tibbi_gecmis.surekli_ilac))
 
-                # 3. Vitaller
                 sql3 = "INSERT INTO ANLIK_VITALLER (VITALLER_ID, NABIZ, TANSIYON_SISTOLIK, TANSIYON_DIYASTOLIK, SOLUNUM, ATES, SPO2, TROPONIN) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
                 st3 = ibm_db.prepare(db_manager._conn, sql3)
                 ibm_db.execute(st3, (vitaller_id, hasta_girdisi.vitaller.nabiz, hasta_girdisi.vitaller.tansiyon_sistolik, hasta_girdisi.vitaller.tansiyon_diyastolik, hasta_girdisi.vitaller.solunum, hasta_girdisi.vitaller.ates, hasta_girdisi.vitaller.spo2, hasta_girdisi.vitaller.troponin))
 
-                # 4. Şikayet
                 sql4 = "INSERT INTO HASTA_SIKAYET (SIKAYET_ID, ANA_SIKAYET, AGRI_SKALASI) VALUES (?, ?, ?)"
                 st4 = ibm_db.prepare(db_manager._conn, sql4)
                 ibm_db.execute(st4, (sikayet_id, hasta_girdisi.sikayet.ana_sikayet, hasta_girdisi.sikayet.agri_skalasi))
 
-                # 5. Hastane Log (Master)
                 sql5 = "INSERT INTO HASTANE_LOG (LOG_ID, DEMOGRAFI_ID, TIBBI_GECMIS_ID, VITALLER_ID, SIKAYET_ID, RISK_SKORU, RENK_KODU, ONERILEN_POLIKLINIK, UYUMLU_BIRIMLER_JSON, KRITIK_BULGU, ERKEN_UYARI_NOTU, ML_RISK_SKORU, AI_PROVIDER) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 st5 = ibm_db.prepare(db_manager._conn, sql5)
                 ibm_db.execute(st5, (log_id, demografi_id, tibbi_gecmis_id, vitaller_id, sikayet_id, llm_output.Risk_Skoru, llm_output.Renk_Kodu, llm_output.Onerilen_Poliklinik, uyumlu_birimler_json, llm_output.Kritik_Bulgu, llm_output.Erken_Uyari_Notu, ml_risk_skoru, provider))
-                logger.info(f"DB2'ye 4 kart ve log verisi başarıyla işlendi: Log ID={log_id}")
+                logger.info(f"Successfully saved the four cards and log to DB2: Log ID={log_id}")
             except Exception as e:
-                logger.warning(f"DB2 yazma hatası ({e}); SQLite yedek moduna kaydediliyor.")
+                logger.warning(f"DB2 write failed ({e}); saving to SQLite fallback.")
 
-        # 2. SQLite Kaydı
         try:
             conn = sqlite3.connect(SQLITE_DB_PATH)
             cur = conn.cursor()
-            
-            # Kart 1
+
             cur.execute("""
             INSERT OR REPLACE INTO TEMEL_DEMOGRAFI VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """, (demografi_id, hasta_girdisi.demografi.isim, hasta_girdisi.demografi.yas, hasta_girdisi.demografi.boy, hasta_girdisi.demografi.kilo, hasta_girdisi.demografi.kan_grubu, hasta_girdisi.demografi.kimlik_no, now_str))
 
-            # Kart 2
             cur.execute("""
             INSERT OR REPLACE INTO TIBBI_GECMIS VALUES (?, ?, ?, ?)
             """, (tibbi_gecmis_id, hasta_girdisi.tibbi_gecmis.kronik_rahatsizlik, hasta_girdisi.tibbi_gecmis.surekli_ilac, now_str))
 
-            # Kart 3
             cur.execute("""
             INSERT OR REPLACE INTO ANLIK_VITALLER VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (vitaller_id, hasta_girdisi.vitaller.nabiz, hasta_girdisi.vitaller.tansiyon_sistolik, hasta_girdisi.vitaller.tansiyon_diyastolik, hasta_girdisi.vitaller.solunum, hasta_girdisi.vitaller.ates, hasta_girdisi.vitaller.spo2, hasta_girdisi.vitaller.troponin, now_str))
 
-            # Kart 4
             cur.execute("""
             INSERT OR REPLACE INTO HASTA_SIKAYET VALUES (?, ?, ?, ?)
             """, (sikayet_id, hasta_girdisi.sikayet.ana_sikayet, hasta_girdisi.sikayet.agri_skalasi, now_str))
 
-            # 5. Hastane Log Tablosu
             cur.execute("""
             INSERT OR REPLACE INTO HASTANE_LOG VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (log_id, demografi_id, tibbi_gecmis_id, vitaller_id, sikayet_id, llm_output.Risk_Skoru, llm_output.Renk_Kodu, llm_output.Onerilen_Poliklinik, uyumlu_birimler_json, llm_output.Kritik_Bulgu, llm_output.Erken_Uyari_Notu, ml_risk_skoru, provider, now_str))
@@ -180,7 +161,7 @@ class TriageRepository:
             conn.commit()
             conn.close()
         except Exception as e:
-            logger.error(f"SQLite yazma hatası: {e}")
+            logger.error(f"SQLite write failed: {e}")
 
         return HastaneLogResponse(
             log_id=log_id,
@@ -200,7 +181,7 @@ class TriageRepository:
 
     @staticmethod
     def get_logs(limit: int = 50) -> List[HastaneLogResponse]:
-        """Hastane log tablosundaki kayıtları listeler."""
+        """List records from the hospital log table."""
         logs = []
         try:
             conn = sqlite3.connect(SQLITE_DB_PATH)
@@ -234,5 +215,5 @@ class TriageRepository:
                 ))
             conn.close()
         except Exception as e:
-            logger.error(f"Log okuma hatası: {e}")
+            logger.error(f"Failed to read log records: {e}")
         return logs

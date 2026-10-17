@@ -27,13 +27,13 @@ class DB2ConnectionManager:
         try:
             import ibm_db
             conn_str = self.get_connection_string()
-            logger.info(f"IBM DB2 sunucusuna bağlanılıyor: {settings.DB2_HOSTNAME}:{settings.DB2_PORT}...")
+            logger.info(f"Connecting to IBM DB2 server: {settings.DB2_HOSTNAME}:{settings.DB2_PORT}...")
             self._conn = ibm_db.connect(conn_str, "", "")
             self._is_connected = True
-            logger.info("IBM DB2 bağlantısı başarıyla sağlandı.")
+            logger.info("IBM DB2 connection established successfully.")
             return self._conn
         except Exception as e:
-            logger.warning(f"IBM DB2 bağlantısı kurulamadı ({e}). Yerel önbellek / SQLite yedek modu devrede.")
+            logger.warning(f"Could not connect to IBM DB2 ({e}). Local cache / SQLite fallback is enabled.")
             self._is_connected = False
             self._use_sqlite_fallback = True
             return None

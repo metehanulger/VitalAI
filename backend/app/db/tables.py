@@ -1,10 +1,10 @@
-"""SQLAlchemy veritabanı modelleri.
-Kaynak şema database/init.sql'dir; PostgreSQL ve DB2 ile tam uyumludur.
+"""SQLAlchemy database models.
+The source schema is database/init.sql, compatible with PostgreSQL and DB2.
 
 Tablo Mimarisi:
 - 4 Kart Tablosu: HastaDemografi, TibbiGecmis, AnlikVitaller, Sikayet
-- 1 Master Tablo: HastaneLog (4 kartın ID'lerini bağlar ve AI kararını saklar)
-- 1 ML Eğitim Tablosu: HastalikSevk (Hastalık -> Sevk Polikliniği Veri Seti)
+- 1 master table: HastaneLog (links the four card IDs and stores the AI decision)
+- 1 ML training table: HastalikSevk (condition-to-clinic reference dataset)
 """
 
 from datetime import date, time, datetime
@@ -14,7 +14,7 @@ from app.db.database import Base
 
 
 class HastaDemografi(Base):
-    """Kart 1: Temel Demografi"""
+    """Card 1: Basic demographics."""
     __tablename__ = "hasta_demografi"
     __table_args__ = (Index("ix_demografi_kimlik", "kimlik_no"),)
 
@@ -28,12 +28,11 @@ class HastaDemografi(Base):
     kimlik_no: Mapped[str] = mapped_column(String(64), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # İlişki
     loglar: Mapped[list["HastaneLog"]] = relationship("HastaneLog", back_populates="demografi", cascade="all, delete-orphan")
 
 
 class TibbiGecmis(Base):
-    """Kart 2: Tıbbi Geçmiş"""
+    """Card 2: Medical history."""
     __tablename__ = "tibbi_gecmis"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -41,12 +40,11 @@ class TibbiGecmis(Base):
     surekli_ilac: Mapped[str | None] = mapped_column(String(2000), default="", nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # İlişki
     loglar: Mapped[list["HastaneLog"]] = relationship("HastaneLog", back_populates="tibbi_gecmis", cascade="all, delete-orphan")
 
 
 class AnlikVitaller(Base):
-    """Kart 3: Anlık Vitaller"""
+    """Card 3: Current vital signs."""
     __tablename__ = "anlik_vitaller"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -59,12 +57,11 @@ class AnlikVitaller(Base):
     troponin: Mapped[float | None] = mapped_column(Numeric(6, 3, asdecimal=False), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # İlişki
     loglar: Mapped[list["HastaneLog"]] = relationship("HastaneLog", back_populates="vitaller", cascade="all, delete-orphan")
 
 
 class Sikayet(Base):
-    """Kart 4: Hasta Şikayeti"""
+    """Card 4: Patient complaint."""
     __tablename__ = "hasta_sikayet"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -72,12 +69,11 @@ class Sikayet(Base):
     agri_skalasi: Mapped[int] = mapped_column(SmallInteger, default=1, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # İlişki
     loglar: Mapped[list["HastaneLog"]] = relationship("HastaneLog", back_populates="sikayet", cascade="all, delete-orphan")
 
 
 class HastaneLog(Base):
-    """5. Master Tablo: Hastane Log (4 Kartı birbirine bağlayan ve AI kararını tutan tablo)"""
+    """Master hospital log linking the four cards and storing the AI decision."""
     __tablename__ = "hastane_log"
     __table_args__ = (
         UniqueConstraint("tarih", "sira_no", name="uq_log_tarih_sira"),
@@ -89,15 +85,13 @@ class HastaneLog(Base):
     tarih: Mapped[date] = mapped_column(Date, nullable=False)
     saat: Mapped[time] = mapped_column(Time, nullable=False)
 
-    # 4 Kartın Referans Kodları (Foreign Keys)
     demografi_id: Mapped[int] = mapped_column(ForeignKey("hasta_demografi.id", ondelete="CASCADE"), nullable=False)
     tibbi_gecmis_id: Mapped[int] = mapped_column(ForeignKey("tibbi_gecmis.id", ondelete="CASCADE"), nullable=False)
     vitaller_id: Mapped[int] = mapped_column(ForeignKey("anlik_vitaller.id", ondelete="CASCADE"), nullable=False)
     sikayet_id: Mapped[int] = mapped_column(ForeignKey("hasta_sikayet.id", ondelete="CASCADE"), nullable=False)
 
-    # Yapay Zekâ ve Triaj Kararları
-    durum: Mapped[str] = mapped_column(String(20), nullable=False)  # KIRMIZI, SARI, YESIL
-    risk_skoru: Mapped[int] = mapped_column(SmallInteger, default=3, nullable=False)  # ESI 1-5
+    durum: Mapped[str] = mapped_column(String(20), nullable=False)
+    risk_skoru: Mapped[int] = mapped_column(SmallInteger, default=3, nullable=False)
     onerilen_poliklinik: Mapped[str | None] = mapped_column(String(150), nullable=True)
     birim_uyumluluk_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     kritik_bulgu: Mapped[str | None] = mapped_column(String(1500), nullable=True)
@@ -109,7 +103,6 @@ class HastaneLog(Base):
     islendi: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # 4 Karta Erişim İlişkileri (Eager/Lazy Navigation)
     demografi: Mapped[HastaDemografi] = relationship("HastaDemografi", back_populates="loglar", lazy="joined")
     tibbi_gecmis: Mapped[TibbiGecmis] = relationship("TibbiGecmis", back_populates="loglar", lazy="joined")
     vitaller: Mapped[AnlikVitaller] = relationship("AnlikVitaller", back_populates="loglar", lazy="joined")
@@ -117,7 +110,7 @@ class HastaneLog(Base):
 
 
 class HastalikSevk(Base):
-    """6. ML Eğitim ve Klinik Sevk Referans Tablosu (Hastalık -> Sevk Polikliniği Veri Seti)"""
+    """ML training and clinical referral reference table."""
     __tablename__ = "hastalik_sevk_referans"
     __table_args__ = (
         Index("ix_ml_hastalik", "hastalik_adi"),
@@ -130,5 +123,5 @@ class HastalikSevk(Base):
     semptomlar: Mapped[str] = mapped_column(String(2000), nullable=False)
     birincil_poliklinik: Mapped[str] = mapped_column(String(100), nullable=False)
     ikincil_poliklinik: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    varsayilan_triaj_kodu: Mapped[str] = mapped_column(String(20), nullable=False)  # KIRMIZI, SARI, YESIL
+    varsayilan_triaj_kodu: Mapped[str] = mapped_column(String(20), nullable=False)
     aciklama: Mapped[str | None] = mapped_column(String(1000), nullable=True)

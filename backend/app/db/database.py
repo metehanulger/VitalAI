@@ -1,5 +1,5 @@
-"""Veritabanı bağlantı motoru ve oturum yönetimi.
-IBM DB2 ve yerel geliştirme için SQLite desteği sunar.
+"""Database engine and session management.
+Supports IBM DB2 and SQLite for local development.
 """
 
 from collections.abc import Iterator
@@ -12,7 +12,6 @@ class Base(DeclarativeBase):
     pass
 
 
-# SQLite için multi-thread erişim ayarı
 _connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
 
 engine = create_engine(
@@ -25,7 +24,7 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_db() -> Iterator[Session]:
-    """FastAPI Depends için veritabanı oturum üreticisi."""
+    """Provide a database session for FastAPI dependencies."""
     db = SessionLocal()
     try:
         yield db
@@ -34,6 +33,6 @@ def get_db() -> Iterator[Session]:
 
 
 def init_db():
-    """Tüm tabloları veritabanında otomatik olarak oluşturur."""
-    from app.db import tables  # Modellerin Base'e kaydedilmesi için import edilmeli
+    """Create all database tables."""
+    from app.db import tables
     Base.metadata.create_all(bind=engine)

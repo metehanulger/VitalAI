@@ -1,12 +1,7 @@
-"""Evrensel LLM İstemcisi (Universal LLM Client).
+"""Universal LLM client.
 
-Bu modül, acil servis triaj değerlendirmesi için herhangi bir LLM sağlayıcısına bağlanabilir:
-- OpenAI Uyumlu Sağlayıcılar (OpenAI, DeepSeek, Groq, OpenRouter, Mistral, Together AI, Perplexity)
-- Yerel Açık Kaynak Modeller (Ollama, vLLM, LM Studio)
-- Google Gemini API (gemini-1.5-flash, gemini-2.0-flash vb.)
-- IBM watsonx.ai (Granite, Llama modelleri)
-
-API anahtarı ve model bilgileri ortam değişkenlerinden (.env) veya doğrudan parametre olarak okunur.
+Supports OpenAI-compatible providers, local models, Google Gemini, and IBM watsonx.ai.
+API keys and model information are read from environment variables or constructor parameters.
 """
 
 import json
@@ -27,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class UniversalLLMClient:
-    """Herhangi bir LLM API'sine bağlanabilen esnek adaptör sınıfı."""
+    """Flexible adapter for connecting to LLM APIs."""
 
     def __init__(
         self,
@@ -36,7 +31,6 @@ class UniversalLLMClient:
         model: Optional[str] = None,
         provider: Optional[str] = None,
     ):
-        # 1. API Anahtarı (Boş bırakılabilir; api_config.py veya .env üzerinden okunabilir)
         self.api_key = (
             api_key
             or getattr(settings, "LLM_API_KEY", "")
@@ -44,7 +38,6 @@ class UniversalLLMClient:
             or os.getenv("LLM_API_KEY", "")
         )
 
-        # 2. Base URL (Varsayılan: OpenAI uyumlu uç nokta veya DeepSeek, Groq, Ollama vb.)
         self.base_url = (
             base_url
             or getattr(settings, "LLM_BASE_URL", "")
@@ -52,7 +45,6 @@ class UniversalLLMClient:
             or os.getenv("LLM_BASE_URL", "https://api.openai.com/v1")
         ).rstrip("/")
 
-        # 3. Model Adı
         self.model = (
             model
             or getattr(settings, "LLM_MODEL", "")
@@ -60,34 +52,36 @@ class UniversalLLMClient:
             or os.getenv("LLM_MODEL", "gpt-4o-mini")
         )
 
-        # 4. Sağlayıcı Türü ('openai_compatible', 'gemini', 'watsonx', 'ollama')
-        self.provider = (
+        configured_provider = (
             provider
             or getattr(settings, "LLM_PROVIDER", "")
             or os.getenv("LLM_PROVIDER", "openai_compatible")
         ).lower()
+        gemini_key = getattr(settings, "GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
+        self.provider = (
+            "gemini"
+            if configured_provider == "openai_compatible" and not self.api_key and gemini_key
+            else configured_provider
+        )
 
     def generate(self, prompt: str, system_prompt: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Verilen promptu yapılandırılmış LLM'e gönderir ve JSON yanıtını döndürür."""
-        # 1. Google Gemini seçilmişse veya sadece Gemini anahtarı varsa
+        """Send a prompt to the configured LLM and return its JSON response."""
         gemini_key = getattr(settings, "GEMINI_API_KEY", "") or os.getenv("GEMINI_API_KEY", "")
         if self.provider == "gemini" or (not self.api_key and gemini_key):
             res = self._call_gemini(prompt, system_prompt)
             if res:
                 return res
 
-        # 2. IBM watsonx seçilmişse
         watsonx_key = getattr(settings, "WATSONX_API_KEY", "") or os.getenv("WATSONX_API_KEY", "")
         if self.provider == "watsonx" or (not self.api_key and watsonx_key):
             res = self._call_watsonx(prompt, system_prompt)
             if res:
                 return res
 
-        # 3. Herhangi bir OpenAI Uyumlu API (DeepSeek, Groq, OpenAI, Ollama, OpenRouter vb.)
         return self._call_openai_compatible(prompt, system_prompt)
 
     def _call_openai_compatible(self, prompt: str, system_prompt: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """OpenAI uyumlu standart REST API çağrısı (httpx/urllib ile hafif ve bağımlılıksız)."""
+        """Call a standard OpenAI-compatible REST API using urllib."""
         endpoint = f"{self.base_url}/chat/completions"
 
         messages = []
@@ -101,7 +95,6 @@ class UniversalLLMClient:
             "temperature": 0.1,
             "response_format": {"type": "json_object"} if "ollama" not in self.base_url else None
         }
-        # Ollama veya bazı sağlayıcılar response_format desteklemezse None olanı çıkart
         if payload["response_format"] is None:
             del payload["response_format"]
 
@@ -126,14 +119,14 @@ class UniversalLLMClient:
 
         except urllib.error.HTTPError as e:
             error_body = e.read().decode("utf-8", errors="ignore")
-            logger.warning(f"LLM API Hatası ({e.code}): {error_body}")
+            logger.warning(f"LLM API error ({e.code}): {error_body}")
         except Exception as e:
-            logger.warning(f"LLM API bağlantı hatası: {e}")
+            logger.warning(f"LLM API connection error: {e}")
 
         return None
 
     def _call_gemini(self, prompt: str, system_prompt: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """Google Gemini API çağrısı."""
+        """Call the Google Gemini API."""
         gemini_key = (
             getattr(settings, "GEMINI_API_KEY", "")
             or (getattr(api_config, "GEMINI_API_KEY", "") if api_config else "")
@@ -145,18 +138,18 @@ class UniversalLLMClient:
         try:
             import google.generativeai as genai
             genai.configure(api_key=gemini_key)
-            model_name = getattr(settings, "GEMINI_MODEL", "gemini-1.5-flash")
+            model_name = getattr(settings, "GEMINI_MODEL", "gemini-3.8-flash")
             model = genai.GenerativeModel(model_name)
 
             full_prompt = f"{system_prompt}\n\n{prompt}" if system_prompt else prompt
             response = model.generate_content(full_prompt)
             return self._extract_json(response.text)
         except Exception as e:
-            logger.warning(f"Gemini çağrı hatası: {e}")
+            logger.warning(f"Gemini request failed: {e}")
             return None
 
     def _call_watsonx(self, prompt: str, system_prompt: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """IBM watsonx.ai çağrısı."""
+        """Call the IBM watsonx.ai API."""
         url = (
             getattr(settings, "WATSONX_URL", "")
             or (getattr(api_config, "WATSONX_URL", "") if api_config else "")
@@ -189,19 +182,18 @@ class UniversalLLMClient:
             response = model.generate_text(prompt=full_prompt)
             return self._extract_json(response)
         except Exception as e:
-            logger.warning(f"watsonx çağrı hatası: {e}")
+            logger.warning(f"watsonx request failed: {e}")
             return None
 
     @staticmethod
     def _extract_json(text: str) -> Optional[Dict[str, Any]]:
-        """LLM çıktısından JSON bloğunu güvenle ayrıştırır."""
+        """Safely parse a JSON object from an LLM response."""
         text = text.strip()
         try:
             return json.loads(text)
         except json.JSONDecodeError:
             pass
 
-        # Regex ile ilk ve son süslü parantez arasını yakala
         match = re.search(r"\{.*\}", text, re.DOTALL)
         if match:
             try:
@@ -211,5 +203,4 @@ class UniversalLLMClient:
         return None
 
 
-# Global evrensel istemci örneği
 llm_client = UniversalLLMClient()

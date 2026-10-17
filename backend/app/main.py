@@ -22,8 +22,8 @@ async def lifespan(app: FastAPI):
         try:
             init_db()
         except SQLAlchemyError:
-            logger.exception("Tablolar oluşturulamadı; DATABASE_URL ayarını kontrol edin")
-    logger.info("watsonx.ai %s", "açık" if settings.watsonx_enabled else "kapalı (yalnızca kural tabanlı triaj)")
+            logger.exception("Could not create database tables; check DATABASE_URL")
+    logger.info("watsonx.ai %s", "enabled" if settings.watsonx_enabled else "disabled")
     yield
 
 
@@ -41,8 +41,8 @@ app.include_router(triage_router)
 
 @app.exception_handler(SQLAlchemyError)
 async def veritabani_hatasi(request: Request, exc: SQLAlchemyError):
-    logger.exception("Veritabanı hatası: %s %s", request.method, request.url.path)
-    return JSONResponse(status_code=503, content={"detail": "Veritabanına şu an ulaşılamıyor, lütfen tekrar deneyin."})
+    logger.exception("Database error: %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=503, content={"detail": "The database is unavailable. Please try again."})
 
 
 @app.get("/api/health", tags=["health"])
@@ -52,9 +52,9 @@ def health():
             db.scalar(select(func.count()).select_from(HastaneLog))
         veritabani = True
     except SQLAlchemyError:
-        logger.exception("Sağlık kontrolünde veritabanı hatası")
+        logger.exception("Database health check failed")
         veritabani = False
     return JSONResponse(
         status_code=200 if veritabani else 503,
-        content={"durum": "ok" if veritabani else "hata", "veritabani": veritabani, "watsonx": settings.watsonx_enabled},
+        content={"durum": "ok" if veritabani else "error", "veritabani": veritabani, "watsonx": settings.watsonx_enabled},
     )

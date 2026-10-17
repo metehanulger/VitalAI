@@ -14,7 +14,6 @@ def test_normal_vitaller_yesil(istek):
 
 
 def test_news2_yuksek_kirmizi(istek):
-    # solunum 25 (3) + nabız 125 (2) + ateş 39.5 (2) = 7
     sonuc = kural_degerlendir(_istek(istek, solunum=25, nabiz=125, ates=39.5))
     assert sonuc.news2 == 7
     assert sonuc.durum == "KIRMIZI"

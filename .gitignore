@@ -5,3 +5,7 @@ __pycache__/
 *.py[cod]
 frontend/node_modules/
 *.xlsx
+backend/model_artifacts/
+*.db
+*.sqlite3
+.DS_Store

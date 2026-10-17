@@ -100,7 +100,7 @@ def test_yapay_zeka_yalnizca_yukseltebilir(client, istek, monkeypatch):
     veri = client.post("/api/triage", json=istek).json()
     assert (veri["hasta_durumu"], veri["karar_kaynagi"]) == ("KIRMIZI", "WATSONX")
 
-    istek["sikayet"]["agri_skalasi"] = 9  # kural: SARI
+    istek["sikayet"]["agri_skalasi"] = 9
     monkeypatch.setattr(triage.watsonx, "degerlendir", lambda ozet: ("YESIL", "Hafif."))
     veri = client.post("/api/triage", json=istek).json()
     assert (veri["hasta_durumu"], veri["karar_kaynagi"]) == ("SARI", "KURAL")

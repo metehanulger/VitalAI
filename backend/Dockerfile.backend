@@ -5,7 +5,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# ibm_db, IBM CLI sürücüsünü kullanır; sürücü libxml2 ister, wheel yoksa derleme için gcc gerekir
 RUN apt-get update \
     && apt-get install -y --no-install-recommends gcc libxml2 \
     && rm -rf /var/lib/apt/lists/*

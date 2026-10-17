@@ -1,11 +1,11 @@
-"""Veritabanı CRUD operasyonları.
-4 Kartın verilerini, Master Hastane Log kaydını ve ML Sevk Veri Setini yönetir.
+"""Database CRUD operations.
+Manages the four intake cards, the master hospital log, and the ML referral dataset.
 """
 
 import json
 from datetime import date, datetime
 from typing import Optional, List, Any
-from sqlalchemy import case, func, select, or_
+from sqlalchemy import func, select, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -15,13 +15,13 @@ _SIRA_DENEME = 5
 
 
 def _sonraki_sira_no(db: Session, tarih: date) -> int:
-    """Günlük artan sıra numarasını hesaplar."""
+    """Calculate the next sequential number for the day."""
     son = db.scalar(select(func.max(HastaneLog.sira_no)).where(HastaneLog.tarih == tarih))
     return (son or 0) + 1
 
 
 def triaj_kaydi_olustur(db: Session, istek: Any, karar: Any, zaman: datetime) -> HastaneLog:
-    """4 Kartı ve bu kartların kodlarını tutan Master HASTANE_LOG satırını tek transaction'da yazar."""
+    """Write the four cards and their IDs to the master hospital log in one transaction."""
     def _to_dict(obj):
         if hasattr(obj, "model_dump"):
             return obj.model_dump()
@@ -69,7 +69,7 @@ def triaj_kaydi_olustur(db: Session, istek: Any, karar: Any, zaman: datetime) ->
                 boy=demo_data.get("boy"),
                 kilo=demo_data.get("kilo"),
                 kan_grubu=str(demo_data.get("kan_grubu", "BILINMIYOR")),
-                kimlik_turu=str(demo_data.get("kimlik_turu", "TC")),
+                kimlik_turu=getattr(demo_data.get("kimlik_turu", "TC"), "value", demo_data.get("kimlik_turu", "TC")),
                 kimlik_no=str(demo_data.get("kimlik_no", "")),
             )
             tibbi_gecmis = TibbiGecmis(
@@ -79,7 +79,7 @@ def triaj_kaydi_olustur(db: Session, istek: Any, karar: Any, zaman: datetime) ->
             vitaller = AnlikVitaller(
                 nabiz=int(vitaller_data.get("nabiz", 80)),
                 tansiyon_sistolik=int(vitaller_data.get("tansiyon_sistolik", 120)),
-                tansiyon_diyastolik=int(vitaller_data.get("tansiyon_diyastolik", 80)),
+                tansiyon_diyastolik=int(vitaller_data.get("tansiyon_diastolik", 80)),
                 solunum=int(vitaller_data.get("solunum", 16)),
                 ates=float(vitaller_data.get("ates", 36.8)),
                 spo2=int(vitaller_data.get("spo2", 98)),
@@ -122,41 +122,41 @@ def triaj_kaydi_olustur(db: Session, istek: Any, karar: Any, zaman: datetime) ->
 
 
 def kuyruk_getir(db: Session, tarih: Optional[date] = None, durum: Optional[str] = None, limit: int = 100) -> List[HastaneLog]:
-    """Acil servis triaj kuyruğu: Öncelikle KIRMIZI, sonra SARI, sonra YESIL sıralamasıyla getirir."""
+    """Return the emergency triage queue ordered by RED, YELLOW, and GREEN status."""
     if tarih is None:
         tarih = date.today()
-
-    oncelik_sirasi = case(
-        (HastaneLog.durum == "KIRMIZI", 1),
-        (HastaneLog.durum == "SARI", 2),
-        (HastaneLog.durum == "YESIL", 3),
-        else_=4,
-    )
 
     query = select(HastaneLog).where(HastaneLog.tarih == tarih)
     if durum:
         query = query.where(HastaneLog.durum == durum.upper())
 
-    query = query.order_by(oncelik_sirasi, HastaneLog.sira_no).limit(limit)
+    query = query.order_by(HastaneLog.risk_skoru, HastaneLog.sira_no).limit(limit)
+    return list(db.scalars(query).all())
+
+
+def tum_triaj_kayitlarini_getir(db: Session) -> List[HastaneLog]:
+    """Return every saved triage record, newest first."""
+    query = select(HastaneLog).order_by(
+        HastaneLog.tarih.desc(),
+        HastaneLog.saat.desc(),
+        HastaneLog.sira_no.desc(),
+    )
     return list(db.scalars(query).all())
 
 
 def log_detay_getir(db: Session, log_id: int) -> Optional[HastaneLog]:
-    """Belirli bir başvuruya ait 4 kart ve AI karar detaylarını getirir."""
+    """Return the four cards and AI decision for a specific visit."""
     return db.scalar(select(HastaneLog).where(HastaneLog.id == log_id))
 
 
-# =====================================================================
-# ML VERİ SETİ VE KLİNİK SEVK FONKSİYONLARI
-# =====================================================================
 
 def ml_egitim_veri_setini_getir(db: Session, limit: int = 5000) -> List[HastalikSevk]:
-    """ML modelinin eğitimi için Hastalık -> Sevk Polikliniği referans tablosunun tümünü döner."""
+    """Return disease-to-clinic reference rows for ML training."""
     return list(db.scalars(select(HastalikSevk).limit(limit)).all())
 
 
 def semptoma_gore_sevk_ara(db: Session, anahtar_kelime: str) -> List[HastalikSevk]:
-    """Şikayet veya semptom metnine göre eşleşen hastalık ve önerilen poliklinikleri arar."""
+    """Search for matching conditions and recommended clinics by complaint or symptom."""
     query = select(HastalikSevk).where(
         or_(
             HastalikSevk.semptomlar.ilike(f"%{anahtar_kelime}%"),
@@ -176,7 +176,7 @@ def yeni_hastalik_sevk_ekle(
     icd10_kodu: Optional[str] = None,
     aciklama: Optional[str] = None
 ) -> HastalikSevk:
-    """Veri tabanına ML eğitimi için yeni bir hastalık-sevk eşleştirmesi kaydeder."""
+    """Save a disease-to-clinic mapping for ML training."""
     kayit = HastalikSevk(
         hastalik_adi=hastalik_adi,
         semptomlar=semptomlar,

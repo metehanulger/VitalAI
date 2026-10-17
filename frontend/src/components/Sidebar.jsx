@@ -4,8 +4,7 @@ export default function Sidebar({ activePage, setActivePage }) {
   const menuItems = [
     { id: 'triage', label: 'Triage Entry' },
     { id: 'queue', label: 'Live Queue' },
-    { id: 'history', label: 'Patient History' },
-    { id: 'summary', label: 'Daily Summary' }
+    { id: 'history', label: 'Patient History' }
   ];
 
   return (

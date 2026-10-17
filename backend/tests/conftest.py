@@ -1,17 +1,15 @@
 import os
 import tempfile
 
-# Ayarlar import anında okunduğu için uygulamadan önce ortam ayarlanır.
-# watsonx kapalı tutulur: yereldeki .env testlerde gerçek API'ye gitmesin.
 os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test.db"
 os.environ["DB_AUTO_CREATE"] = "true"
 os.environ["WATSONX_APIKEY"] = ""
 os.environ["WATSONX_PROJECT_ID"] = ""
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi.testclient import TestClient
 
-from app.main import app  # noqa: E402
+from app.main import app
 
 
 @pytest.fixture(scope="session")

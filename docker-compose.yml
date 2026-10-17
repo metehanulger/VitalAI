@@ -1,0 +1,57 @@
+# Başlatma: docker compose up --build
+# İlk açılışta DB2 kurulumu 5-10 dakika sürer; backend, DB2 tabloları hazır olunca başlar.
+services:
+  db2:
+    image: icr.io/db2_community/db2:11.5.9.0
+    container_name: triaj-db2
+    privileged: true
+    environment:
+      LICENSE: accept
+      DB2INSTANCE: db2inst1
+      DB2INST1_PASSWORD: ${DB2_PASSWORD:-triaj_db2_sifre}
+      DBNAME: ${DB2_DBNAME:-TRIAJDB}
+      BLU: "false"
+      ENABLE_ORACLE_COMPATIBILITY: "false"
+      UPDATEAVAIL: "NO"
+      TO_CREATE_SAMPLEDB: "false"
+      REPODB: "false"
+      IS_OSXFS: "false"
+      PERSISTENT_HOME: "true"
+      HADR_ENABLED: "false"
+    ports:
+      - "50000:50000"
+    volumes:
+      - db2-data:/database
+      - ./database/init.sql:/opt/triaj/init.sql:ro
+      # Kurulum bitince /var/custom altındaki betikler çalışır -> init.sql uygulanır
+      - ./database/db2-init.sh:/var/custom/db2-init.sh:ro
+    healthcheck:
+      # Bağlantı + HASTANE_LOG tablosu varsa sağlıklı
+      test: ["CMD-SHELL", "su - db2inst1 -c \"db2 connect to $${DBNAME} >/dev/null && db2 'SELECT COUNT(*) FROM HASTANE_LOG' >/dev/null\""]
+      interval: 30s
+      timeout: 30s
+      retries: 30
+      start_period: 300s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.backend
+    container_name: triaj-backend
+    env_file:
+      - path: ./backend/.env
+        required: false
+    environment:
+      DATABASE_URL: db2+ibm_db://db2inst1:${DB2_PASSWORD:-triaj_db2_sifre}@db2:50000/${DB2_DBNAME:-TRIAJDB}
+      # Şemayı database/init.sql kurar
+      DB_AUTO_CREATE: "false"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db2:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  db2-data:

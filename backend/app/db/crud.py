@@ -1,15 +1,15 @@
 """Veritabanı CRUD operasyonları.
-4 Kartın verilerini ve Master Hastane Log kaydını tek bir transaction içerisinde yönetir.
+4 Kartın verilerini, Master Hastane Log kaydını ve ML Sevk Veri Setini yönetir.
 """
 
 import json
 from datetime import date, datetime
 from typing import Optional, List, Any
-from sqlalchemy import case, func, select, desc
+from sqlalchemy import case, func, select, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.db.tables import HastaDemografi, TibbiGecmis, AnlikVitaller, Sikayet, HastaneLog
+from app.db.tables import HastaDemografi, TibbiGecmis, AnlikVitaller, Sikayet, HastaneLog, HastalikSevk
 
 _SIRA_DENEME = 5
 
@@ -21,13 +21,7 @@ def _sonraki_sira_no(db: Session, tarih: date) -> int:
 
 
 def triaj_kaydi_olustur(db: Session, istek: Any, karar: Any, zaman: datetime) -> HastaneLog:
-    """4 Kartı ve bu kartların kodlarını tutan Master HASTANE_LOG satırını tek transaction'da yazar.
-    
-    istek: 4 kart verisini içeren Pydantic nesnesi (demografi, tibbi_gecmis, vitaller, sikayet)
-    karar: AI veya kural motoru tarafından üretilen TriajKarari nesnesi
-    zaman: Kayıt anı (datetime)
-    """
-    # Girdi model_dump desteği (Pydantic v2 veya dict)
+    """4 Kartı ve bu kartların kodlarını tutan Master HASTANE_LOG satırını tek transaction'da yazar."""
     def _to_dict(obj):
         if hasattr(obj, "model_dump"):
             return obj.model_dump()
@@ -42,7 +36,6 @@ def triaj_kaydi_olustur(db: Session, istek: Any, karar: Any, zaman: datetime) ->
     vitaller_data = _to_dict(istek.vitaller)
     sikayet_data = _to_dict(istek.sikayet)
 
-    # Karar alanlarını çıkart
     durum = getattr(karar, "durum", "SARI")
     if hasattr(durum, "value"):
         durum = durum.value
@@ -63,15 +56,13 @@ def triaj_kaydi_olustur(db: Session, istek: Any, karar: Any, zaman: datetime) ->
     kritik_bulgu = getattr(karar, "kritik_bulgu", None)
     erken_uyari_notu = getattr(karar, "erken_uyari_notu", None)
     aciklama = getattr(karar, "aciklama", None)
-    karar_kaynagi = getattr(karar, "karar_kaynagi", "WATSONX")
+    karar_kaynagi = getattr(karar, "karar_kaynagi", "LLM")
     news2_skoru = getattr(karar, "news2_skoru", 0)
 
-    # Transaction içinde kayıt
     for deneme in range(_SIRA_DENEME):
         try:
             sira_no = _sonraki_sira_no(db, zaman.date())
 
-            # 4 Kart Tablosunu Oluştur
             demografi = HastaDemografi(
                 isim=demo_data.get("isim", ""),
                 yas=int(demo_data.get("yas", 0)),
@@ -99,7 +90,6 @@ def triaj_kaydi_olustur(db: Session, istek: Any, karar: Any, zaman: datetime) ->
                 agri_skalasi=int(sikayet_data.get("agri_skalasi", 1)),
             )
 
-            # Master Log Nesnesi (4 kart ilişkilendirilir)
             log = HastaneLog(
                 sira_no=sira_no,
                 tarih=zaman.date(),
@@ -136,7 +126,6 @@ def kuyruk_getir(db: Session, tarih: Optional[date] = None, durum: Optional[str]
     if tarih is None:
         tarih = date.today()
 
-    # Aciliyet sıralama ağırlığı: KIRMIZI=1, SARI=2, YESIL=3
     oncelik_sirasi = case(
         (HastaneLog.durum == "KIRMIZI", 1),
         (HastaneLog.durum == "SARI", 2),
@@ -155,3 +144,49 @@ def kuyruk_getir(db: Session, tarih: Optional[date] = None, durum: Optional[str]
 def log_detay_getir(db: Session, log_id: int) -> Optional[HastaneLog]:
     """Belirli bir başvuruya ait 4 kart ve AI karar detaylarını getirir."""
     return db.scalar(select(HastaneLog).where(HastaneLog.id == log_id))
+
+
+# =====================================================================
+# ML VERİ SETİ VE KLİNİK SEVK FONKSİYONLARI
+# =====================================================================
+
+def ml_egitim_veri_setini_getir(db: Session, limit: int = 5000) -> List[HastalikSevk]:
+    """ML modelinin eğitimi için Hastalık -> Sevk Polikliniği referans tablosunun tümünü döner."""
+    return list(db.scalars(select(HastalikSevk).limit(limit)).all())
+
+
+def semptoma_gore_sevk_ara(db: Session, anahtar_kelime: str) -> List[HastalikSevk]:
+    """Şikayet veya semptom metnine göre eşleşen hastalık ve önerilen poliklinikleri arar."""
+    query = select(HastalikSevk).where(
+        or_(
+            HastalikSevk.semptomlar.ilike(f"%{anahtar_kelime}%"),
+            HastalikSevk.hastalik_adi.ilike(f"%{anahtar_kelime}%")
+        )
+    )
+    return list(db.scalars(query).all())
+
+
+def yeni_hastalik_sevk_ekle(
+    db: Session,
+    hastalik_adi: str,
+    semptomlar: str,
+    birincil_poliklinik: str,
+    varsayilan_triaj_kodu: str = "SARI",
+    ikincil_poliklinik: Optional[str] = None,
+    icd10_kodu: Optional[str] = None,
+    aciklama: Optional[str] = None
+) -> HastalikSevk:
+    """Veri tabanına ML eğitimi için yeni bir hastalık-sevk eşleştirmesi kaydeder."""
+    kayit = HastalikSevk(
+        hastalik_adi=hastalik_adi,
+        semptomlar=semptomlar,
+        birincil_poliklinik=birincil_poliklinik,
+        ikincil_poliklinik=ikincil_poliklinik,
+        varsayilan_triaj_kodu=varsayilan_triaj_kodu,
+        icd10_kodu=icd10_kodu,
+        aciklama=aciklama,
+    )
+    db.add(kayit)
+    db.commit()
+    db.refresh(kayit)
+    return kayit

@@ -1,5 +1,5 @@
 from app.db.database import Base, engine, get_db, init_db
-from app.db.tables import HastaDemografi, TibbiGecmis, AnlikVitaller, Sikayet, HastaneLog
+from app.db.tables import HastaDemografi, TibbiGecmis, AnlikVitaller, Sikayet, HastaneLog, HastalikSevk
 from app.db import crud
 
 __all__ = [
@@ -12,5 +12,6 @@ __all__ = [
     "AnlikVitaller",
     "Sikayet",
     "HastaneLog",
+    "HastalikSevk",
     "crud",
 ]

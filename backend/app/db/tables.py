@@ -1,13 +1,14 @@
 """SQLAlchemy veritabanı modelleri.
-Kaynak şema database/init.sql'dir; buradaki tanımlar init.sql ile birebir aynı tutulmuştur.
+Kaynak şema database/init.sql'dir; PostgreSQL ve DB2 ile tam uyumludur.
 
-Acil Servis Ön Triaj Mimarisi:
+Tablo Mimarisi:
 - 4 Kart Tablosu: HastaDemografi, TibbiGecmis, AnlikVitaller, Sikayet
 - 1 Master Tablo: HastaneLog (4 kartın ID'lerini bağlar ve AI kararını saklar)
+- 1 ML Eğitim Tablosu: HastalikSevk (Hastalık -> Sevk Polikliniği Veri Seti)
 """
 
 from datetime import date, time, datetime
-from sqlalchemy import Date, ForeignKey, Index, Integer, Numeric, SmallInteger, String, Time, DateTime, Text, UniqueConstraint, func
+from sqlalchemy import Date, ForeignKey, Index, Integer, Numeric, SmallInteger, String, Time, DateTime, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
 
@@ -102,7 +103,7 @@ class HastaneLog(Base):
     kritik_bulgu: Mapped[str | None] = mapped_column(String(1500), nullable=True)
     erken_uyari_notu: Mapped[str | None] = mapped_column(String(1500), nullable=True)
     aciklama: Mapped[str | None] = mapped_column(String(2000), nullable=True)
-    karar_kaynagi: Mapped[str] = mapped_column(String(50), default="WATSONX", nullable=False)
+    karar_kaynagi: Mapped[str] = mapped_column(String(50), default="LLM", nullable=False)
     news2_skoru: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
 
     islendi: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
@@ -113,3 +114,21 @@ class HastaneLog(Base):
     tibbi_gecmis: Mapped[TibbiGecmis] = relationship("TibbiGecmis", back_populates="loglar", lazy="joined")
     vitaller: Mapped[AnlikVitaller] = relationship("AnlikVitaller", back_populates="loglar", lazy="joined")
     sikayet: Mapped[Sikayet] = relationship("Sikayet", back_populates="loglar", lazy="joined")
+
+
+class HastalikSevk(Base):
+    """6. ML Eğitim ve Klinik Sevk Referans Tablosu (Hastalık -> Sevk Polikliniği Veri Seti)"""
+    __tablename__ = "hastalik_sevk_referans"
+    __table_args__ = (
+        Index("ix_ml_hastalik", "hastalik_adi"),
+        Index("ix_ml_birincil", "birincil_poliklinik"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hastalik_adi: Mapped[str] = mapped_column(String(200), nullable=False)
+    icd10_kodu: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    semptomlar: Mapped[str] = mapped_column(String(2000), nullable=False)
+    birincil_poliklinik: Mapped[str] = mapped_column(String(100), nullable=False)
+    ikincil_poliklinik: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    varsayilan_triaj_kodu: Mapped[str] = mapped_column(String(20), nullable=False)  # KIRMIZI, SARI, YESIL
+    aciklama: Mapped[str | None] = mapped_column(String(1000), nullable=True)

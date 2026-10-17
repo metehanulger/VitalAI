@@ -1,0 +1,4 @@
+pandas>=2.0
+scikit-learn>=1.4
+google-genai>=1.0
+python-dotenv>=1.0

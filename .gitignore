@@ -1,0 +1,4 @@
+echo "node_modules/" >> .gitignore
+echo ".venv/" >> .gitignore
+echo "__pycache__/" >> .gitignore
+echo ".env" >> .gitignore

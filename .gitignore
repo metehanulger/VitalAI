@@ -1,5 +1,14 @@
-node_modules/
+# Python
 .venv/
+venv/
 __pycache__/
-.env
 *.py[cod]
+.pytest_cache/
+*.db
+
+# Node
+node_modules/
+dist/
+
+# Ortam değişkenleri (API anahtarları burada durur)
+.env

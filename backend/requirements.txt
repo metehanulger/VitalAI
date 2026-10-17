@@ -1,0 +1,16 @@
+# API + veritabanı
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.30
+pydantic>=2.7,<3
+pydantic-settings>=2.3
+SQLAlchemy>=2.0.30,<2.1
+ibm_db>=3.2.3
+ibm_db_sa>=0.4.1
+ibm-watsonx-ai>=1.1
+tzdata>=2024.1
+
+# ML / LLM modelleri (app/models/ml.py, app/models/llm.py)
+pandas>=2.0
+scikit-learn>=1.4
+google-genai>=1.0
+python-dotenv>=1.0

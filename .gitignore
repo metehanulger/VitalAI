@@ -1,4 +1,6 @@
-echo "node_modules/" >> .gitignore
-echo ".venv/" >> .gitignore
-echo "__pycache__/" >> .gitignore
-echo "frontend/node_modules/" >> .gitignore
+node_modules/
+.venv/
+__pycache__/
+.env
+*.py[cod]
+frontend/node_modules/

@@ -2,6 +2,19 @@
 
 **Tech Stack:** React (Vite) + FastAPI + IBM DB2 + IBM watsonx.ai
 
+## Why This Project Exists
+
+In medical emergencies, accurate triage is a matter of life and death. AI systems that work with incomplete patient data, or that allow data to change during analysis, produce unreliable and potentially dangerous results. Without strict data safeguards, they cause critical errors, waste healthcare workers' time and put patient safety at risk.
+
+This project is a **fail-safe AI triage platform** that fixes this. The AI is never activated until all mandatory data is complete and locked, so premature or partial data is never processed.
+
+**Core features**
+
+- **Strict validation:** mandatory emergency data is separated from optional fields (chronic illnesses, regular medications, pain scale).
+- **Locking mechanism:** the AI analysis button is enabled only after triage data entry is finalized and secured.
+- **Automated safety blocks:** if a mandatory field is missing, nothing is sent to the AI and nothing is written to the database.
+- **Secure AI processing:** IBM watsonx.ai generates the triage insights, and it can only escalate urgency, never lower it.
+
 ## Overview
 
 An AI-enhanced pre-triage system for emergency departments. A clinical rule engine (NEWS2) sets the baseline urgency, and **IBM watsonx.ai** looks for hidden risk factors.

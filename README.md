@@ -22,20 +22,80 @@ Triage Interface (4 Modules) ──POST /api/triage──▶  Backend
 Results Dashboard  ◀── {log_id, sira_no, hasta_durumu, aciklama, kodlar, ...}
 ```
 
-## Data Collected
+## Data We Collect
 
-Table and field names are in Turkish (1:1 with the backend models). English meanings are given below. Schema: `database/init.sql`.
+Each triage visit collects four groups of data (one per UI card), stored in four tables, plus one log table that ties them together. Table and field names are in Turkish to map 1:1 with the backend models; the English meaning is given for each. Schema: `database/init.sql`.
 
-| Table (UI Module) | English Name | Fields (English meaning) |
+### 1. `HASTA_DEMOGRAFI` — Patient Demographics
+*Who the patient is.*
+
+| Field | Meaning | Example / Rule |
 |---|---|---|
-| `HASTA_DEMOGRAFI` (1. Basic Demographics) | Patient Demographics | `isim` name, `yas` age, `boy` height (cm, optional), `kilo` weight (kg, optional), `kan_grubu` blood type, `kimlik_turu` ID type (National ID / Passport), `kimlik_no` ID number |
-| `TIBBI_GECMIS` (2. Medical History) | Medical History | `kronik_rahatsizlik` chronic illnesses, `surekli_ilac` regular medications |
-| `ANLIK_VITALLER` (3. Real-Time Vitals) | Real-Time Vitals | `nabiz` pulse, `tansiyon_sistolik` / `tansiyon_diastolik` blood pressure, `solunum` respiration rate, `ates` temperature, `spo2` oxygen saturation |
-| `SIKAYET` (4. Chief Complaint) | Complaint | `ana_sikayet` main complaint (free text), `agri_skalasi` pain scale (1-10) |
-| `HASTANE_LOG` (system log) | Hospital Log | IDs of the 4 records, `hasta_durumu` status, `aciklama` explanation, `karar_kaynagi` decision source, `tarih` date, `saat` time, `sira_no` daily queue number (resets to 1 each day) |
+| `isim` | Full name | `Ayşe Yılmaz` |
+| `yas` | Age (years) | `34` |
+| `boy` | Height in cm (optional) | `165` |
+| `kilo` | Weight in kg (optional) | `60.5` |
+| `kan_grubu` | Blood type | `A+`; empty → `BILINMIYOR` (Unknown) |
+| `kimlik_turu` | ID document type | `TC` (Turkish National ID) or Passport |
+| `kimlik_no` | ID number | National ID is checksum-validated; passport is 5-20 alphanumeric characters. Masked in API reads. |
 
-**Status values:** `KIRMIZI` = RED (critical), `SARI` = YELLOW (urgent), `YESIL` = GREEN (non-urgent).
-**Decision source:** `KURAL` = rule engine, `WATSONX` = AI escalated, `KURAL+WATSONX` = both agree, `MANUEL` = manual override by staff.
+### 2. `TIBBI_GECMIS` — Medical History
+*Conditions the patient already has.*
+
+| Field | Meaning | Example / Rule |
+|---|---|---|
+| `kronik_rahatsizlik` | Chronic illnesses | `Asthma` |
+| `surekli_ilac` | Regularly used medications | Can be empty |
+
+### 3. `ANLIK_VITALLER` — Real-Time Vitals
+*Vital signs measured on arrival. These feed the NEWS2 score.*
+
+| Field | Meaning | Example / Allowed Range |
+|---|---|---|
+| `nabiz` | Pulse (beats/min) | `78` (20-300) |
+| `tansiyon_sistolik` | Systolic blood pressure (mmHg) | `120` (must be > diastolic) |
+| `tansiyon_diastolik` | Diastolic blood pressure (mmHg) | `80` |
+| `solunum` | Respiration rate (breaths/min) | `16` (4-80) |
+| `ates` | Body temperature (°C) | `36.8` (25-45) |
+| `spo2` | Blood oxygen saturation (%) | `98` (30-100) |
+
+### 4. `SIKAYET` — Complaint
+*Why the patient came in.*
+
+| Field | Meaning | Example / Rule |
+|---|---|---|
+| `ana_sikayet` | Chief complaint (free text) | `Severe sore throat`; scanned for critical keywords and analyzed by watsonx.ai |
+| `agri_skalasi` | Self-reported pain level | `3` (1 = mild, 10 = worst) |
+
+### 5. `HASTANE_LOG` — Hospital Log (Triage Result)
+*The decision, linked to the four records above.*
+
+| Field | Meaning | Example / Rule |
+|---|---|---|
+| `log_id` | Unique ID of the triage record | `12` |
+| `sira_no` | Daily queue number | `7` (resets to 1 every day) |
+| `tarih` / `saat` | Date / time of the assessment | `2026-10-17` / `15:42:10` |
+| `hasta_durumu` | Patient status (priority) | `KIRMIZI`, `SARI` or `YESIL` (see below) |
+| `aciklama` | Explanation of the decision | `No critical findings in rule-based assessment (NEWS2=0).` |
+| `karar_kaynagi` | Who made the decision | `KURAL`, `WATSONX`, `KURAL+WATSONX` or `MANUEL` (see below) |
+| `demografi_id`, `tibbi_gecmis_id`, `vitaller_id`, `sikayet_id` | References to the four records above | `12` |
+
+**Patient status (`hasta_durumu`)**
+
+| Value | English | Meaning |
+|---|---|---|
+| `KIRMIZI` | RED | Critical, needs immediate attention |
+| `SARI` | YELLOW | Urgent, needs prompt attention |
+| `YESIL` | GREEN | Non-urgent, can wait |
+
+**Decision source (`karar_kaynagi`)**
+
+| Value | Meaning |
+|---|---|
+| `KURAL` | Decided entirely by the rule engine |
+| `WATSONX` | watsonx.ai escalated the priority |
+| `KURAL+WATSONX` | Rule engine and watsonx.ai agreed |
+| `MANUEL` | Manually overridden by medical staff |
 
 ## Installation
 
@@ -114,11 +174,10 @@ Frontend `.env`: `VITE_API_URL=http://localhost:8000`
 }
 ```
 
-### Validation Rules
+### Validation Notes
 
-- `boy` and `kilo` are optional. Empty `kan_grubu` defaults to `BILINMIYOR` (Unknown). `O+` is normalized to `0+`.
-- Turkish National ID is checksum-validated; passports must be 5-20 alphanumeric characters.
-- Vitals limits: pulse 20-300, systolic > diastolic, respiration 4-80, temperature 25-45 °C, SpO2 30-100 %, pain scale 1-10.
+- `O+` blood type input is normalized to `0+`.
+- All field rules (ranges, ID checks) are listed in the Data We Collect section above.
 
 ### Errors
 

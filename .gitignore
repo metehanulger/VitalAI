@@ -4,6 +4,7 @@ __pycache__/
 .env
 *.py[cod]
 frontend/node_modules/
+frontend/dist/
 *.xlsx
 backend/model_artifacts/
 *.db

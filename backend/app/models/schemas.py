@@ -9,7 +9,16 @@ from datetime import date, time
 from enum import Enum
 from typing import Literal
 
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, computed_field, field_serializer, field_validator, model_validator
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    computed_field,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from app.core.metin import katla
 

@@ -56,21 +56,27 @@ Each result includes a color-coded status, an urgency score from 1 to 5, a sugge
 
 ### 1. Start the backend
 
-In PowerShell, from the repository root:
+On Windows, in PowerShell from the repository root:
 
 ```powershell
 cd backend
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -r requirements-dev.txt
-uvicorn app.main:app --reload
+python -m pip install uv
+uv sync --group dev
+uv run uvicorn app.main:app --reload
 ```
 
-On macOS or Linux, activate the virtual environment with:
+On macOS or Linux, from the repository root:
 
 ```bash
+cd backend
+python3.12 -m venv .venv
 source .venv/bin/activate
+python -m pip install --upgrade pip uv
+uv sync --group dev
+uv run uvicorn app.main:app --reload
 ```
 
 The local default database is SQLite, so no separate database server is needed. Tables are created automatically when the backend starts. The API is available at `http://localhost:8000`; interactive API documentation is at `http://localhost:8000/docs`.
@@ -91,7 +97,7 @@ Vite usually serves the app at `http://localhost:5173` and proxies `/api` reques
 
 ## Configuration
 
-The application reads settings from a `.env` file in the repository root or in `backend/`. An example is provided in `backend/.env.example`. **You do not need a `.env` file for local SQLite development.** The example sets `DATABASE_URL` to PostgreSQL; if you are not running PostgreSQL, remove that setting or change it to `DATABASE_URL=sqlite:///./triaj.db`.
+The application reads settings from a `.env` file in the repository root or in `backend/`. Use `backend/.env.example` as a starting point. Local development uses SQLite and needs no separate database server.
 
 | Variable | Purpose |
 |---|---|
@@ -106,6 +112,30 @@ The application reads settings from a `.env` file in the repository root or in `
 
 With no LLM credentials configured, the rules-based assessment remains available, but LLM-generated analysis is disabled. Db2 settings are not needed unless you use the Db2 Compose setup.
 
+To enable Gemini during local development, copy the example file to `backend/.env` before starting the backend and add your own key:
+
+```powershell
+# Windows PowerShell, from the repository root
+Copy-Item backend/.env.example backend/.env
+```
+
+```bash
+# macOS or Linux, from the repository root
+cp backend/.env.example backend/.env
+```
+
+Then open `backend/.env`, set `GEMINI_API_KEY` to your key, and save it. Keep this personal file private; it is ignored by Git. Without a key, the app still runs with rules-based assessment.
+
+The `uv.lock` file pins the backend dependency graph across supported platforms. Google Gemini support is included in the standard backend install. Set `GEMINI_API_KEY` in `.env` to enable it. From `backend/`, add other optional integrations only when needed:
+
+| Need | Install |
+|---|---|
+| IBM watsonx.ai | `uv sync --extra llm` |
+| PostgreSQL | `uv sync --extra postgres` |
+| IBM Db2 | `uv sync --extra db2` |
+
+The Db2 Docker image installs the Db2 and LLM extras automatically. The basic Windows/SQLite setup does not install optional database drivers.
+
 ### Docker Compose with Db2
 
 From the repository root:
@@ -115,6 +145,8 @@ docker compose up --build
 ```
 
 Compose starts the backend and IBM Db2. Initial Db2 setup can take several minutes. Compose sets `DATABASE_URL` for the Db2 connection. To remove the persisted Db2 data as well as stop the containers, run `docker compose down -v`.
+
+The frontend is available at `http://localhost:5173`, and the API at `http://localhost:8000`. If you trained local ML models, Compose mounts `backend/model_artifacts/` into the backend container as read-only; without artifacts, the rules-based assessment remains available.
 
 ## API reference
 
@@ -213,9 +245,11 @@ backend/
   app/core/      Triage rules, LLM clients, and configuration
   app/db/        SQLAlchemy models and data access
   app/models/    Data models and ML classifiers
+  pyproject.toml Python dependency and optional integration definitions
+  uv.lock        Locked Python dependency versions
   data/          Model training datasets
   tests/         Backend tests
-frontend/        React web app
+frontend/        React web app and its Docker/nginx configuration
 database/        Db2 initialization schema and setup script
 docker-compose.yml
 ```

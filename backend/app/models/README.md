@@ -7,10 +7,17 @@ different labels:
 - MTSamples trains the specialty classifier from medical transcription text and
   `medical_specialty` labels. Non-clinic document categories are excluded.
 
-Download the CSV files locally after accepting the source dataset access terms.
-The triage source is [FedMML ED Triage](https://huggingface.co/datasets/olaflaitinen/fedmml-ed-triage).
-The Kaggle notebook uses the [MTSamples medical transcription data](https://www.kaggle.com/datasets/tboyle10/medicaltranscriptions).
-Place both CSVs in a local data directory, then run this from `backend/`:
+The training CSV files are included in `backend/data/`. If you obtain fresh copies,
+follow the source pages' access terms. The triage source is [FedMML ED Triage](https://huggingface.co/datasets/olaflaitinen/fedmml-ed-triage).
+The specialty source is the [MTSamples medical transcription dataset](https://www.kaggle.com/datasets/tboyle10/medicaltranscriptions).
+From `backend/`, install the base dependencies and run the trainer:
+
+```bash
+uv sync
+uv run python -m app.models.train \
+  --fedmml ./data/fedmml.csv \
+  --mtsamples ./data/mtsamples.csv
+```
 
 ## Dataset sources and licenses
 
@@ -25,12 +32,6 @@ Place both CSVs in a local data directory, then run this from `backend/`:
 
 These terms apply to the source datasets, not to this project's code. Never include
 locally collected patient records, `.env` files, or API keys in a public repository.
-
-```bash
-python -m app.models.train \
-  --fedmml ./data/fedmml.csv \
-  --mtsamples ./data/mtsamples.csv
-```
 
 Training first reserves a stratified 20% holdout from each dataset and prints
 accuracy, balanced accuracy, macro F1, and per-class precision/recall. It then

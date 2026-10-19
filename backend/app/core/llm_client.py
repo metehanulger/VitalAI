@@ -1,4 +1,4 @@
-"""Universal LLM client.
+    """Universal LLM client.
 
 Supports OpenAI-compatible providers, local models, Google Gemini, and IBM watsonx.ai.
 API keys and model information are read from environment variables or constructor parameters.
@@ -19,6 +19,7 @@ except ImportError:
     api_config = None
 
 logger = logging.getLogger(__name__)
+DEFAULT_OPENAI_BASE_URL = "https://api.openai.com/v1"
 
 
 class UniversalLLMClient:
@@ -77,6 +78,10 @@ class UniversalLLMClient:
             res = self._call_watsonx(prompt, system_prompt)
             if res:
                 return res
+
+        if not self.api_key and self.base_url.rstrip("/").lower() == DEFAULT_OPENAI_BASE_URL:
+            logger.debug("LLM request skipped: no API key is configured for the default OpenAI endpoint")
+            return None
 
         return self._call_openai_compatible(prompt, system_prompt)
 

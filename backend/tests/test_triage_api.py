@@ -96,11 +96,15 @@ def test_pasaport_ve_kan_grubu_normalize(client, istek):
 
 
 def test_yapay_zeka_yalnizca_yukseltebilir(client, istek, monkeypatch):
-    monkeypatch.setattr(triage.watsonx, "degerlendir", lambda ozet: ("KIRMIZI", "Klinik tablo ağır."))
+    ai_outputs = iter([
+        {"durum": "KIRMIZI", "risk_skoru": 1, "aciklama": "Klinik tablo ağır."},
+        {"durum": "YESIL", "risk_skoru": 5, "aciklama": "Hafif."},
+    ])
+    monkeypatch.setattr(triage.llm_client, "generate", lambda *_args: next(ai_outputs))
     veri = client.post("/api/triage", json=istek).json()
-    assert (veri["hasta_durumu"], veri["karar_kaynagi"]) == ("KIRMIZI", "WATSONX")
+    assert veri["hasta_durumu"] == "KIRMIZI"
+    assert veri["karar_kaynagi"].endswith("+KURAL")
 
     istek["sikayet"]["agri_skalasi"] = 9
-    monkeypatch.setattr(triage.watsonx, "degerlendir", lambda ozet: ("YESIL", "Hafif."))
     veri = client.post("/api/triage", json=istek).json()
-    assert (veri["hasta_durumu"], veri["karar_kaynagi"]) == ("SARI", "KURAL")
+    assert (veri["hasta_durumu"], veri["karar_kaynagi"].endswith("+KURAL")) == ("SARI", True)

@@ -78,7 +78,7 @@ def tum_kayitlar(db: Session = Depends(get_db)):
 
 
 def _log_bul(log_id: int, db: Session):
-    log = crud.triaj_getir(db, log_id)
+    log = crud.log_detay_getir(db, log_id)
     if log is None:
         raise HTTPException(status_code=404, detail="Triage record not found")
     return log

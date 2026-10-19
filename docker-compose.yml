@@ -1,5 +1,5 @@
 # Başlatma: docker compose up --build
-# İlk açılışta DB2 kurulumu 5-10 dakika sürer; backend, DB2 tabloları hazır olunca başlar.
+# Arayüz http://localhost:5173 adresinde açılır. İlk DB2 kurulumu birkaç dakika sürebilir.
 services:
   db2:
     image: icr.io/db2_community/db2:11.5.9.0
@@ -26,8 +26,8 @@ services:
       # Kurulum bitince /var/custom altındaki betikler çalışır -> init.sql uygulanır
       - ./database/db2-init.sh:/var/custom/db2-init.sh:ro
     healthcheck:
-      # Bağlantı + HASTANE_LOG tablosu varsa sağlıklı
-      test: ["CMD-SHELL", "su - db2inst1 -c \"db2 connect to $${DBNAME} >/dev/null && db2 'SELECT COUNT(*) FROM HASTANE_LOG' >/dev/null\""]
+      # Bağlantı ve temel triaj tabloları kullanılabilir durumdaysa sağlıklı
+      test: ["CMD-SHELL", "su - db2inst1 -c \"db2 connect to $${DBNAME} >/dev/null && db2 'SELECT COUNT(*) FROM HASTANE_LOG' >/dev/null && db2 'SELECT COUNT(*) FROM HASTA_DEMOGRAFI' >/dev/null && db2 'SELECT COUNT(*) FROM TIBBI_GECMIS' >/dev/null && db2 'SELECT COUNT(*) FROM ANLIK_VITALLER' >/dev/null && db2 'SELECT COUNT(*) FROM HASTA_SIKAYET' >/dev/null\""]
       interval: 30s
       timeout: 30s
       retries: 30
@@ -48,9 +48,23 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend/model_artifacts:/app/model_artifacts:ro
     depends_on:
       db2:
         condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.frontend
+    container_name: triaj-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_started
     restart: unless-stopped
 
 volumes:

@@ -323,7 +323,3 @@ class ClinicalSpecialtyClassifier:
         import joblib
 
         return cls(joblib.load(path))
-
-
-ESIClassifier = UrgencyClassifier
-ESIPrediction = TriagePrediction

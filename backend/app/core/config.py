@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     VERSION: str = "2.0.0"
     API_V1_STR: str = "/api"
     DB_AUTO_CREATE: bool = True
-    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
+    CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:3000,http://127.0.0.1:3000"
     TRIAGE_URGENCY_MODEL: Optional[str] = None
     TRIAGE_SPECIALTY_MODEL: Optional[str] = None
 

@@ -1,10 +1,17 @@
 import os
 import tempfile
 
-os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test.db"
+_TEST_DIR = tempfile.mkdtemp(prefix="vitialai-tests-")
+os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DIR}/test.db"
 os.environ["DB_AUTO_CREATE"] = "true"
-os.environ["WATSONX_APIKEY"] = ""
+os.environ["LLM_PROVIDER"] = "openai_compatible"
+os.environ["LLM_API_KEY"] = ""
+os.environ["LLM_BASE_URL"] = "https://api.openai.com/v1"
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["WATSONX_API_KEY"] = ""
 os.environ["WATSONX_PROJECT_ID"] = ""
+os.environ["TRIAGE_URGENCY_MODEL"] = os.path.join(_TEST_DIR, "no-urgency-model.joblib")
+os.environ["TRIAGE_SPECIALTY_MODEL"] = os.path.join(_TEST_DIR, "no-specialty-model.joblib")
 
 import pytest
 from fastapi.testclient import TestClient

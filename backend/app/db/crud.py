@@ -149,6 +149,16 @@ def log_detay_getir(db: Session, log_id: int) -> Optional[HastaneLog]:
     return db.scalar(select(HastaneLog).where(HastaneLog.id == log_id))
 
 
+def durum_guncelle(db: Session, log: HastaneLog, durum: str, aciklama: Optional[str] = None) -> HastaneLog:
+    """Save a staff member's manual triage status update."""
+    log.durum = durum.upper()
+    log.karar_kaynagi = "MANUEL"
+    if aciklama is not None:
+        log.aciklama = aciklama
+    db.commit()
+    db.refresh(log)
+    return log
+
 
 def ml_egitim_veri_setini_getir(db: Session, limit: int = 5000) -> List[HastalikSevk]:
     """Return disease-to-clinic reference rows for ML training."""

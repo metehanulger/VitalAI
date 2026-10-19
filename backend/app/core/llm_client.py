@@ -1,4 +1,4 @@
-    """Universal LLM client.
+"""Universal LLM client.
 
 Supports OpenAI-compatible providers, local models, Google Gemini, and IBM watsonx.ai.
 API keys and model information are read from environment variables or constructor parameters.

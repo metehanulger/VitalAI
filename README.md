@@ -1,201 +1,201 @@
-# AI-Driven Pre-Triage Application
+<div align="center">
 
-**Tech Stack:** React (Vite) + FastAPI + IBM DB2 + IBM watsonx.ai
+# VitialAI · Ön Triaj ve Poliklinik Yönlendirme
 
-## Why This Project Exists
+**Hasta kabul bilgilerini değerlendirir, öncelik seviyesini belirler ve günlük triaj kuyruğunu yönetir.**
 
-In medical emergencies, accurate triage is a matter of life and death. AI systems that work with incomplete patient data, or that allow data to change during analysis, produce unreliable and potentially dangerous results. Without strict data safeguards, they cause critical errors, waste healthcare workers' time and put patient safety at risk.
+React arayüzü · FastAPI servisi · SQLite, PostgreSQL veya IBM Db2
 
-This project is a **fail-safe AI triage platform** that fixes this. The AI is never activated until all mandatory data is complete and locked, so premature or partial data is never processed.
+</div>
 
-**Core features**
+<p align="center">
+  <a href="#proje-hakkında">Proje</a> ·
+  <a href="#hızlı-başlangıç">Kurulum</a> ·
+  <a href="#yapılandırma">Yapılandırma</a> ·
+  <a href="#api-özeti">API</a> ·
+  <a href="#yerel-ml-modellerini-eğitme-isteğe-bağlı">ML modelleri</a>
+</p>
 
-- **Strict validation:** mandatory emergency data is separated from optional fields (chronic illnesses, regular medications, pain scale).
-- **Locking mechanism:** the AI analysis button is enabled only after triage data entry is finalized and secured.
-- **Automated safety blocks:** if a mandatory field is missing, nothing is sent to the AI and nothing is written to the database.
-- **Secure AI processing:** IBM watsonx.ai generates the triage insights, and it can only escalate urgency, never lower it.
+## Proje hakkında
 
-## Overview
+VitialAI, acil servise başvuran kişiler için bir **ön triaj demonstrasyonudur**. Demografi, tıbbi geçmiş, yaşamsal bulgular ve ana şikâyet bilgilerini toplar; NEWS2 temelli kurallar, isteğe bağlı makine öğrenmesi modelleri ve yapılandırılmış bir LLM sağlayıcısından gelen çıktıları bir araya getirir.
 
-An AI-enhanced pre-triage system for emergency departments. A clinical rule engine (NEWS2) sets the baseline urgency, and **IBM watsonx.ai** looks for hidden risk factors.
+Sonuç; renk kodlu durum, 1–5 arası aciliyet seviyesi, önerilen poliklinik ve açıklama içerir. Sonuçlar veritabanına kaydedilir ve günlük kuyrukta görüntülenir. LLM veya yerel modeller kullanılabilir olmadığında sistem kural tabanlı değerlendirmeyle çalışmaya devam eder.
 
-**Safety principle:** the AI can only **escalate** priority (e.g., Yellow → Red). It can never downgrade a critical status flagged by the vitals. Every record and decision is logged in IBM DB2 in a single transaction.
+> **Klinik kullanım uyarısı:** Bu proje eğitim ve yazılım demonstrasyonu içindir; teşhis veya tedavi amacıyla kullanılamaz. Sonuçlar sağlık profesyonelinin değerlendirmesinin yerini tutmaz ve klinik kullanım için doğrulanmamıştır.
 
-## Architecture
+## Özellikler
 
-```text
-Triage Interface (4 Modules) ──POST /api/triage──▶  Backend
-                                               ├─ Rule Engine (NEWS2 + Critical Thresholds + Keywords)
-                                               ├─ IBM watsonx.ai (Optional; can ONLY ESCALATE urgency)
-                                               └─ IBM DB2: Single Transaction Logging
-                                                  PATIENT_DEMOGRAPHICS ─┐
-                                                  MEDICAL_HISTORY      ─┤ IDs ─▶ HOSPITAL_LOG
-                                                  REALTIME_VITALS      ─┤        (+ status, date,
-                                                  COMPLAINT            ─┘           time, queue number)
-Results Dashboard  ◀── {log_id, sira_no, hasta_durumu, aciklama, kodlar, ...}
-```
+- Dört bölümden oluşan hasta kabul formu: demografi, tıbbi geçmiş, yaşamsal bulgular ve şikâyet
+- NEWS2 ve kritik belirti kontrollerine dayanan kural tabanlı önceliklendirme
+- İsteğe bağlı OpenAI uyumlu API, Gemini veya IBM watsonx.ai entegrasyonu
+- FedMML ve MTSamples veri kümeleriyle eğitilebilen isteğe bağlı yerel sınıflandırıcılar
+- Günlük hasta kuyruğu, kayıt geçmişi ve triaj sonucu görüntüleme
+- Yerel geliştirme için SQLite; yapılandırılabilir PostgreSQL ve Docker Compose ile Db2
+- T.C. kimlik numarası ve pasaport numarası doğrulaması; API yanıtlarında kimlik numarasını maskeleme
 
-## Data We Collect
+## Teknoloji yığını
 
-Each triage visit collects four groups of data (one per UI card), stored in four tables, plus one log table that ties them together. Table and field names are in Turkish to map 1:1 with the backend models; the English meaning is given for each. Schema: `database/init.sql`.
-
-### 1. `HASTA_DEMOGRAFI` — Patient Demographics
-*Who the patient is.*
-
-| Field | Meaning | Example / Rule |
-|---|---|---|
-| `isim` | Full name | `Ayşe Yılmaz` |
-| `yas` | Age (years) | `34` |
-| `boy` | Height in cm (optional) | `165` |
-| `kilo` | Weight in kg (optional) | `60.5` |
-| `kan_grubu` | Blood type | `A+`; empty → `BILINMIYOR` (Unknown) |
-| `kimlik_turu` | ID document type | `TC` (Turkish National ID) or Passport |
-| `kimlik_no` | ID number | National ID is checksum-validated; passport is 5-20 alphanumeric characters. Masked in API reads. |
-
-### 2. `TIBBI_GECMIS` — Medical History
-*Conditions the patient already has.*
-
-| Field | Meaning | Example / Rule |
-|---|---|---|
-| `kronik_rahatsizlik` | Chronic illnesses | `Asthma` |
-| `surekli_ilac` | Regularly used medications | Can be empty |
-
-### 3. `ANLIK_VITALLER` — Real-Time Vitals
-*Vital signs measured on arrival. These feed the NEWS2 score.*
-
-| Field | Meaning | Example / Allowed Range |
-|---|---|---|
-| `nabiz` | Pulse (beats/min) | `78` (20-300) |
-| `tansiyon_sistolik` | Systolic blood pressure (mmHg) | `120` (must be > diastolic) |
-| `tansiyon_diastolik` | Diastolic blood pressure (mmHg) | `80` |
-| `solunum` | Respiration rate (breaths/min) | `16` (4-80) |
-| `ates` | Body temperature (°C) | `36.8` (25-45) |
-| `spo2` | Blood oxygen saturation (%) | `98` (30-100) |
-
-### 4. `SIKAYET` — Complaint
-*Why the patient came in.*
-
-| Field | Meaning | Example / Rule |
-|---|---|---|
-| `ana_sikayet` | Chief complaint (free text) | `Severe sore throat`; scanned for critical keywords and analyzed by watsonx.ai |
-| `agri_skalasi` | Self-reported pain level | `3` (1 = mild, 10 = worst) |
-
-### 5. `HASTANE_LOG` — Hospital Log (Triage Result)
-*The decision, linked to the four records above.*
-
-| Field | Meaning | Example / Rule |
-|---|---|---|
-| `log_id` | Unique ID of the triage record | `12` |
-| `sira_no` | Daily queue number | `7` (resets to 1 every day) |
-| `tarih` / `saat` | Date / time of the assessment | `2026-10-17` / `15:42:10` |
-| `hasta_durumu` | Patient status (priority) | `KIRMIZI`, `SARI` or `YESIL` (see below) |
-| `aciklama` | Explanation of the decision | `No critical findings in rule-based assessment (NEWS2=0).` |
-| `karar_kaynagi` | Who made the decision | `KURAL`, `WATSONX`, `KURAL+WATSONX` or `MANUEL` (see below) |
-| `demografi_id`, `tibbi_gecmis_id`, `vitaller_id`, `sikayet_id` | References to the four records above | `12` |
-
-**Patient status (`hasta_durumu`)**
-
-| Value | English | Meaning |
-|---|---|---|
-| `KIRMIZI` | RED | Critical, needs immediate attention |
-| `SARI` | YELLOW | Urgent, needs prompt attention |
-| `YESIL` | GREEN | Non-urgent, can wait |
-
-**Decision source (`karar_kaynagi`)**
-
-| Value | Meaning |
+| Katman | Teknolojiler |
 |---|---|
-| `KURAL` | Decided entirely by the rule engine |
-| `WATSONX` | watsonx.ai escalated the priority |
-| `KURAL+WATSONX` | Rule engine and watsonx.ai agreed |
-| `MANUEL` | Manually overridden by medical staff |
+| Arayüz | React 18, Vite, Tailwind CSS |
+| API | Python 3.12, FastAPI, Pydantic |
+| Veri tabanı | SQLite (yerel varsayılan), PostgreSQL, IBM Db2 (Compose yapılandırması) |
+| ML | pandas, scikit-learn, joblib |
+| LLM | OpenAI uyumlu REST API, Google Gemini veya IBM watsonx.ai |
 
-## Installation
+## Hızlı başlangıç
 
-### Production (IBM DB2 + Backend via Docker)
+### Gereksinimler
 
-```bash
-cp backend/.env.example backend/.env   # add watsonx keys (optional)
-docker compose up --build
-```
+- Python 3.12 (64 bit önerilir)
+- Node.js ve npm
+- Git
+- İsteğe bağlı: Docker Desktop (Compose ile Db2 kullanmak için)
 
-First DB2 initialization takes about 5-10 minutes; the backend starts automatically afterwards.
+### 1. Backend’i başlatın
 
-- API: http://localhost:8000
-- Swagger UI: http://localhost:8000/docs
+PowerShell’de proje klasöründen:
 
-### Local Development (SQLite, no DB2)
-
-```bash
+```powershell
 cd backend
-python -m venv .venv
-.venv\Scripts\activate            # macOS/Linux: source .venv/bin/activate
-pip install -r requirements-dev.txt
-cp .env.example .env
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+python -m pip install -r requirements-dev.txt
 uvicorn app.main:app --reload
 ```
 
-Run tests with `pytest` inside `backend`.
+macOS/Linux için sanal ortamı etkinleştirme komutu:
 
-### Fail-Safe Behavior
+```bash
+source .venv/bin/activate
+```
 
-- Empty watsonx keys → backend falls back to the rule-based system.
-- watsonx slower than `WATSONX_TIMEOUT` → the rule engine's decision is used immediately.
+Yerel varsayılan veritabanı SQLite’tır; ayrı bir veritabanı sunucusu başlatmanız gerekmez. İlk çalıştırmada tablolar otomatik oluşturulur. Backend `http://localhost:8000` adresinde, API dokümantasyonu `http://localhost:8000/docs` adresinde açılır.
 
-## API Reference
+> PowerShell sanal ortamı etkinleştirmeyi engellerse, aynı terminal oturumu için `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` komutunu çalıştırıp etkinleştirme adımını tekrarlayın.
 
-Frontend `.env`: `VITE_API_URL=http://localhost:8000`
+### 2. Web arayüzünü başlatın
 
-| Method | Endpoint | Description |
+Yeni bir terminal açıp proje kökünden çalıştırın:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Vite arayüzü genellikle `http://localhost:5173` adresinde açar ve `/api` isteklerini `http://127.0.0.1:8000` adresindeki backend’e yönlendirir.
+
+## Yapılandırma
+
+Uygulama, yapılandırmayı proje kökündeki veya `backend/` klasöründeki `.env` dosyasından okuyabilir. `.env.example` dosyasında örnek ayarlar bulunur. **Yerel SQLite kurulumu için `.env` dosyası oluşturmak gerekmez.** Örnek dosyayı kullanırsanız `DATABASE_URL` PostgreSQL adresine ayarlıdır; PostgreSQL çalıştırmıyorsanız bu satırı kaldırın veya `DATABASE_URL=sqlite:///./triaj.db` olarak değiştirin.
+
+| Değişken | Açıklama |
+|---|---|
+| `DATABASE_URL` | SQLAlchemy bağlantı adresi. Yerel varsayılan `sqlite:///./triaj.db` değeridir. |
+| `LLM_PROVIDER` | `openai_compatible`, `gemini` veya `watsonx` |
+| `LLM_API_KEY` | OpenAI uyumlu sağlayıcının API anahtarı |
+| `LLM_BASE_URL` | OpenAI uyumlu API adresi; varsayılan `https://api.openai.com/v1` |
+| `LLM_MODEL` | OpenAI uyumlu API’de kullanılacak model adı |
+| `GEMINI_API_KEY` | Gemini kullanılıyorsa API anahtarı |
+| `WATSONX_API_KEY` / `WATSONX_PROJECT_ID` | watsonx.ai kullanılıyorsa erişim bilgileri |
+| `TRIAGE_URGENCY_MODEL` / `TRIAGE_SPECIALTY_MODEL` | Eğitilmiş yerel model dosyalarının isteğe bağlı yolları |
+
+LLM anahtarları boş bırakıldığında triaj kuralları çalışmayı sürdürür; LLM destekli açıklama ve değerlendirme devre dışı kalır. watsonx.ai ayarları kullanılmıyorsa Db2 yapılandırma değişkenlerini girmeniz gerekmez.
+
+### Docker Compose ile Db2
+
+Proje kökünde:
+
+```powershell
+docker compose up --build
+```
+
+Compose yapılandırması backend ve IBM Db2’yi başlatır. İlk Db2 kurulumu birkaç dakika sürebilir. Compose, `DATABASE_URL` değerini Db2 bağlantısı için kendisi ayarlar. Verileri sıfırlamak gerekirse `docker compose down -v` komutu Db2 veri hacmini de siler.
+
+## API özeti
+
+Tüm endpoint’ler `http://localhost:8000` taban adresini kullanır.
+
+| Metot | Yol | Açıklama |
 |---|---|---|
-| `POST` | `/api/triage` | Submit the 4 modules; returns the triage result (`201`). |
-| `GET` | `/api/triage?tarih=YYYY-MM-DD&durum=KIRMIZI` | Daily waiting list, ordered RED → YELLOW → GREEN. |
-| `GET` | `/api/triage/{log_id}` | Full log + 4 data cards (ID numbers masked). |
-| `PATCH` | `/api/triage/{log_id}` | Manual override: `{"hasta_durumu": "SARI", "aciklama": "..."}` |
-| `GET` | `/api/triage/secenekler` | Dropdown options (blood types, ID types, statuses). |
-| `GET` | `/api/health` | Health check: `{"durum", "veritabani", "watsonx"}`. |
+| `POST` | `/api/triage` | Yeni triaj kaydı oluşturur ve sonucu döndürür (`201`) |
+| `GET` | `/api/triage` | Günlük kuyruğu listeler; `tarih`, `durum` ve `limit` filtreleri alır |
+| `GET` | `/api/triage/{log_id}` | Bir kaydın sonucunu ve dört kabul bölümünü getirir |
+| `GET` | `/api/triage/history` | Kayıt geçmişini listeler |
+| `PATCH` | `/api/triage/{log_id}` | Kaydın renk kodlu durumunu günceller |
+| `GET` | `/api/triage/secenekler` | Form seçeneklerini döndürür |
+| `GET` | `/api/health` | Servis ve veritabanı durumunu bildirir |
 
-### Example Request: `POST /api/triage`
+### Örnek istek
 
 ```json
 {
   "demografi": {
-    "isim": "Ayşe Yılmaz", "yas": 34, "boy": 165, "kilo": 60.5,
-    "kan_grubu": "A+", "kimlik_turu": "TC", "kimlik_no": "10000000146"
+    "isim": "Ayşe Yılmaz",
+    "yas": 34,
+    "boy": 165,
+    "kilo": 60.5,
+    "kan_grubu": "A+",
+    "kimlik_turu": "PASAPORT",
+    "kimlik_no": "A1234567"
   },
-  "tibbi_gecmis": { "kronik_rahatsizlik": "Asthma", "surekli_ilac": "" },
+  "tibbi_gecmis": {
+    "kronik_rahatsizlik": "Astım",
+    "surekli_ilac": ""
+  },
   "vitaller": {
-    "nabiz": 78, "tansiyon_sistolik": 120, "tansiyon_diastolik": 80,
-    "solunum": 16, "ates": 36.8, "spo2": 98
+    "nabiz": 78,
+    "tansiyon_sistolik": 120,
+    "tansiyon_diyastolik": 80,
+    "solunum": 16,
+    "ates": 36.8,
+    "spo2": 98
   },
-  "sikayet": { "ana_sikayet": "Severe sore throat", "agri_skalasi": 3 }
+  "sikayet": {
+    "ana_sikayet": "Boğaz ağrısı",
+    "agri_skalasi": 3
+  }
 }
 ```
 
-### Example Response: `201 Created`
+### Skorları okuma
 
-```json
-{
-  "log_id": 12,
-  "sira_no": 7,
-  "tarih": "2026-10-17",
-  "saat": "15:42:10",
-  "hasta_durumu": "YESIL",
-  "aciklama": "No critical findings in rule-based assessment (NEWS2=0).",
-  "karar_kaynagi": "KURAL",
-  "kodlar": { "demografi_id": 12, "tibbi_gecmis_id": 12, "vitaller_id": 12, "sikayet_id": 12 }
-}
+- `risk_skoru`, ESI yönünü kullanır: **1 en acil**, **5 en az acil**.
+- `aciliyet_seviyesi`, arayüzde gösterilen ters ölçektir: **1 en düşük**, **5 en yüksek aciliyet**.
+- Renkli durumlar `KIRMIZI`, `SARI` ve `YESIL` değerleridir.
+- 65 yaş ve üzerindeki kişiler için nihai aciliyet seviyesi bir basamak artırılır.
+- API, T.C. kimlik numarası ve pasaport numarasını maskeleyerek döndürür. Gerçek kişisel veya sağlık verilerini herkese açık ortamlara göndermeyin.
+
+## Yerel ML modellerini eğitme (isteğe bağlı)
+
+Eğitim CSV dosyaları `backend/data/` altında bulunur. Backend klasöründen:
+
+```bash
+python -m app.models.train \
+  --fedmml ./data/fedmml.csv \
+  --mtsamples ./data/mtsamples.csv
 ```
 
-### Validation Notes
+Eğitim, sınıflandırma metriklerini yazdırır ve modelleri `backend/model_artifacts/` altına kaydeder. Bu dosyalar `.gitignore` kapsamındadır. Eğitim verilerindeki başarı ölçümleri bağımsız klinik doğrulama anlamına gelmez. Veri kümelerinin kaynakları, lisansları ve model sınırlamaları için [model notlarına](backend/app/models/README.md) bakın.
 
-- `O+` blood type input is normalized to `0+`.
-- All field rules (ranges, ID checks) are listed in the Data We Collect section above.
+## Proje yapısı
 
-### Errors
+```text
+backend/
+  app/api/       FastAPI endpoint’leri
+  app/core/      Triaj kuralları, LLM bağlantıları ve yapılandırma
+  app/db/        SQLAlchemy modelleri ve veri erişimi
+  app/models/    Veri modelleri ve ML sınıflandırıcıları
+  data/          Model eğitim verileri
+  tests/         Backend testleri
+frontend/        React arayüzü
+database/        Db2 başlangıç şeması ve kurulum betiği
+docker-compose.yml
+```
 
-| Code | Meaning |
-|---|---|
-| `422` | Validation error; `detail[].loc` points to the failing field (e.g., `["body", "vitaller", "spo2"]`). |
-| `404` | Log ID not found. |
-| `503` | Database (DB2) unreachable. |
+## Lisans
+
+Kod [MIT Lisansı](LICENSE) ile dağıtılır. Model eğitim verilerinin kaynak ve lisans bilgileri [model notlarında](backend/app/models/README.md) açıklanmıştır.

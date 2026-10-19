@@ -1,61 +1,62 @@
 <div align="center">
 
-# VitialAI · Ön Triaj ve Poliklinik Yönlendirme
+# VitialAI · Emergency Pre-Triage & Department Routing
 
-**Hasta kabul bilgilerini değerlendirir, öncelik seviyesini belirler ve günlük triaj kuyruğunu yönetir.**
+**Collect patient intake details, estimate urgency, and manage the daily triage queue.**
 
-React arayüzü · FastAPI servisi · SQLite, PostgreSQL veya IBM Db2
+React · FastAPI · SQLite, PostgreSQL, or IBM Db2
 
 </div>
 
 <p align="center">
-  <a href="#proje-hakkında">Proje</a> ·
-  <a href="#hızlı-başlangıç">Kurulum</a> ·
-  <a href="#yapılandırma">Yapılandırma</a> ·
-  <a href="#api-özeti">API</a> ·
-  <a href="#yerel-ml-modellerini-eğitme-isteğe-bağlı">ML modelleri</a>
+  <a href="#overview">Overview</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#configuration">Configuration</a> ·
+  <a href="#api-reference">API</a> ·
+  <a href="#training-the-local-ml-models-optional">ML models</a>
 </p>
 
-## Proje hakkında
+## Overview
 
-VitialAI, acil servise başvuran kişiler için bir **ön triaj demonstrasyonudur**. Demografi, tıbbi geçmiş, yaşamsal bulgular ve ana şikâyet bilgilerini toplar; NEWS2 temelli kurallar, isteğe bağlı makine öğrenmesi modelleri ve yapılandırılmış bir LLM sağlayıcısından gelen çıktıları bir araya getirir.
+VitialAI is an **emergency department pre-triage demonstration**. It collects demographics, medical history, vital signs, and the patient's chief complaint. The backend combines NEWS2-based rules, optional local machine-learning models, and an optional configured LLM provider to produce a triage result.
 
-Sonuç; renk kodlu durum, 1–5 arası aciliyet seviyesi, önerilen poliklinik ve açıklama içerir. Sonuçlar veritabanına kaydedilir ve günlük kuyrukta görüntülenir. LLM veya yerel modeller kullanılabilir olmadığında sistem kural tabanlı değerlendirmeyle çalışmaya devam eder.
+Each result includes a color-coded status, an urgency score from 1 to 5, a suggested department, and an explanation. Records are stored in a database and shown in the daily queue and history views. If the LLM or local model artifacts are unavailable, the rules-based assessment can still run.
 
-> **Klinik kullanım uyarısı:** Bu proje eğitim ve yazılım demonstrasyonu içindir; teşhis veya tedavi amacıyla kullanılamaz. Sonuçlar sağlık profesyonelinin değerlendirmesinin yerini tutmaz ve klinik kullanım için doğrulanmamıştır.
+> **Clinical use notice:** This project is for education and software demonstration only. It is not intended for diagnosis or treatment, has not been clinically validated, and does not replace assessment by a qualified healthcare professional.
 
-## Özellikler
+## Features
 
-- Dört bölümden oluşan hasta kabul formu: demografi, tıbbi geçmiş, yaşamsal bulgular ve şikâyet
-- NEWS2 ve kritik belirti kontrollerine dayanan kural tabanlı önceliklendirme
-- İsteğe bağlı OpenAI uyumlu API, Gemini veya IBM watsonx.ai entegrasyonu
-- FedMML ve MTSamples veri kümeleriyle eğitilebilen isteğe bağlı yerel sınıflandırıcılar
-- Günlük hasta kuyruğu, kayıt geçmişi ve triaj sonucu görüntüleme
-- Yerel geliştirme için SQLite; yapılandırılabilir PostgreSQL ve Docker Compose ile Db2
-- T.C. kimlik numarası ve pasaport numarası doğrulaması; API yanıtlarında kimlik numarasını maskeleme
+- Four-part patient intake: demographics, medical history, vital signs, and chief complaint
+- Rules-based prioritization using NEWS2 and critical-symptom checks
+- Optional OpenAI-compatible API, Google Gemini, or IBM watsonx.ai integration
+- Optional local classifiers trainable with the FedMML and MTSamples datasets
+- Daily patient queue, saved-record history, and triage details
+- SQLite for local development, configurable PostgreSQL, and Db2 in the Docker Compose setup
+- Turkish national ID and passport validation; ID numbers are masked in API responses
 
-## Teknoloji yığını
+## Technology stack
 
-| Katman | Teknolojiler |
+| Layer | Technologies |
 |---|---|
-| Arayüz | React 18, Vite, Tailwind CSS |
+| Web app | React 18, Vite, Tailwind CSS |
 | API | Python 3.12, FastAPI, Pydantic |
-| Veri tabanı | SQLite (yerel varsayılan), PostgreSQL, IBM Db2 (Compose yapılandırması) |
-| ML | pandas, scikit-learn, joblib |
-| LLM | OpenAI uyumlu REST API, Google Gemini veya IBM watsonx.ai |
+| Database | SQLite (local default), PostgreSQL, IBM Db2 (Compose configuration) |
+| Machine learning | pandas, scikit-learn, joblib |
+| LLM providers | OpenAI-compatible REST API, Google Gemini, IBM watsonx.ai |
 
-## Hızlı başlangıç
+## Quick start
 
-### Gereksinimler
+### Requirements
 
-- Python 3.12 (64 bit önerilir)
-- Node.js ve npm
+- Python 3.12 (64-bit recommended)
+- Node.js and npm
 - Git
-- İsteğe bağlı: Docker Desktop (Compose ile Db2 kullanmak için)
+- Optional: Docker Desktop (for Db2 with Docker Compose)
 
-### 1. Backend’i başlatın
+### 1. Start the backend
 
-PowerShell’de proje klasöründen:
+In PowerShell, from the repository root:
 
 ```powershell
 cd backend
@@ -66,19 +67,19 @@ python -m pip install -r requirements-dev.txt
 uvicorn app.main:app --reload
 ```
 
-macOS/Linux için sanal ortamı etkinleştirme komutu:
+On macOS or Linux, activate the virtual environment with:
 
 ```bash
 source .venv/bin/activate
 ```
 
-Yerel varsayılan veritabanı SQLite’tır; ayrı bir veritabanı sunucusu başlatmanız gerekmez. İlk çalıştırmada tablolar otomatik oluşturulur. Backend `http://localhost:8000` adresinde, API dokümantasyonu `http://localhost:8000/docs` adresinde açılır.
+The local default database is SQLite, so no separate database server is needed. Tables are created automatically when the backend starts. The API is available at `http://localhost:8000`; interactive API documentation is at `http://localhost:8000/docs`.
 
-> PowerShell sanal ortamı etkinleştirmeyi engellerse, aynı terminal oturumu için `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` komutunu çalıştırıp etkinleştirme adımını tekrarlayın.
+> If PowerShell blocks virtual environment activation, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in that terminal, then retry the activation command.
 
-### 2. Web arayüzünü başlatın
+### 2. Start the web app
 
-Yeni bir terminal açıp proje kökünden çalıştırın:
+Open a second terminal at the repository root:
 
 ```powershell
 cd frontend
@@ -86,55 +87,55 @@ npm install
 npm run dev
 ```
 
-Vite arayüzü genellikle `http://localhost:5173` adresinde açar ve `/api` isteklerini `http://127.0.0.1:8000` adresindeki backend’e yönlendirir.
+Vite usually serves the app at `http://localhost:5173` and proxies `/api` requests to the backend at `http://127.0.0.1:8000`.
 
-## Yapılandırma
+## Configuration
 
-Uygulama, yapılandırmayı proje kökündeki veya `backend/` klasöründeki `.env` dosyasından okuyabilir. `.env.example` dosyasında örnek ayarlar bulunur. **Yerel SQLite kurulumu için `.env` dosyası oluşturmak gerekmez.** Örnek dosyayı kullanırsanız `DATABASE_URL` PostgreSQL adresine ayarlıdır; PostgreSQL çalıştırmıyorsanız bu satırı kaldırın veya `DATABASE_URL=sqlite:///./triaj.db` olarak değiştirin.
+The application reads settings from a `.env` file in the repository root or in `backend/`. An example is provided in `backend/.env.example`. **You do not need a `.env` file for local SQLite development.** The example sets `DATABASE_URL` to PostgreSQL; if you are not running PostgreSQL, remove that setting or change it to `DATABASE_URL=sqlite:///./triaj.db`.
 
-| Değişken | Açıklama |
+| Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | SQLAlchemy bağlantı adresi. Yerel varsayılan `sqlite:///./triaj.db` değeridir. |
-| `LLM_PROVIDER` | `openai_compatible`, `gemini` veya `watsonx` |
-| `LLM_API_KEY` | OpenAI uyumlu sağlayıcının API anahtarı |
-| `LLM_BASE_URL` | OpenAI uyumlu API adresi; varsayılan `https://api.openai.com/v1` |
-| `LLM_MODEL` | OpenAI uyumlu API’de kullanılacak model adı |
-| `GEMINI_API_KEY` | Gemini kullanılıyorsa API anahtarı |
-| `WATSONX_API_KEY` / `WATSONX_PROJECT_ID` | watsonx.ai kullanılıyorsa erişim bilgileri |
-| `TRIAGE_URGENCY_MODEL` / `TRIAGE_SPECIALTY_MODEL` | Eğitilmiş yerel model dosyalarının isteğe bağlı yolları |
+| `DATABASE_URL` | SQLAlchemy connection URL. The local default is `sqlite:///./triaj.db`. |
+| `LLM_PROVIDER` | `openai_compatible`, `gemini`, or `watsonx` |
+| `LLM_API_KEY` | API key for an OpenAI-compatible provider |
+| `LLM_BASE_URL` | OpenAI-compatible API base URL; defaults to `https://api.openai.com/v1` |
+| `LLM_MODEL` | Model name for the OpenAI-compatible provider |
+| `GEMINI_API_KEY` | API key when using Gemini |
+| `WATSONX_API_KEY` / `WATSONX_PROJECT_ID` | Credentials when using IBM watsonx.ai |
+| `TRIAGE_URGENCY_MODEL` / `TRIAGE_SPECIALTY_MODEL` | Optional paths to trained local model files |
 
-LLM anahtarları boş bırakıldığında triaj kuralları çalışmayı sürdürür; LLM destekli açıklama ve değerlendirme devre dışı kalır. watsonx.ai ayarları kullanılmıyorsa Db2 yapılandırma değişkenlerini girmeniz gerekmez.
+With no LLM credentials configured, the rules-based assessment remains available, but LLM-generated analysis is disabled. Db2 settings are not needed unless you use the Db2 Compose setup.
 
-### Docker Compose ile Db2
+### Docker Compose with Db2
 
-Proje kökünde:
+From the repository root:
 
 ```powershell
 docker compose up --build
 ```
 
-Compose yapılandırması backend ve IBM Db2’yi başlatır. İlk Db2 kurulumu birkaç dakika sürebilir. Compose, `DATABASE_URL` değerini Db2 bağlantısı için kendisi ayarlar. Verileri sıfırlamak gerekirse `docker compose down -v` komutu Db2 veri hacmini de siler.
+Compose starts the backend and IBM Db2. Initial Db2 setup can take several minutes. Compose sets `DATABASE_URL` for the Db2 connection. To remove the persisted Db2 data as well as stop the containers, run `docker compose down -v`.
 
-## API özeti
+## API reference
 
-Tüm endpoint’ler `http://localhost:8000` taban adresini kullanır.
+All endpoints use the base URL `http://localhost:8000`.
 
-| Metot | Yol | Açıklama |
+| Method | Path | Description |
 |---|---|---|
-| `POST` | `/api/triage` | Yeni triaj kaydı oluşturur ve sonucu döndürür (`201`) |
-| `GET` | `/api/triage` | Günlük kuyruğu listeler; `tarih`, `durum` ve `limit` filtreleri alır |
-| `GET` | `/api/triage/{log_id}` | Bir kaydın sonucunu ve dört kabul bölümünü getirir |
-| `GET` | `/api/triage/history` | Kayıt geçmişini listeler |
-| `PATCH` | `/api/triage/{log_id}` | Kaydın renk kodlu durumunu günceller |
-| `GET` | `/api/triage/secenekler` | Form seçeneklerini döndürür |
-| `GET` | `/api/health` | Servis ve veritabanı durumunu bildirir |
+| `POST` | `/api/triage` | Create a triage record and return its result (`201`) |
+| `GET` | `/api/triage` | List the daily queue; supports `tarih`, `durum`, and `limit` query parameters |
+| `GET` | `/api/triage/{log_id}` | Get a result and all four intake sections |
+| `GET` | `/api/triage/history` | List saved records |
+| `PATCH` | `/api/triage/{log_id}` | Update a record's color-coded status |
+| `GET` | `/api/triage/secenekler` | Get the form options |
+| `GET` | `/api/health` | Check API and database availability |
 
-### Örnek istek
+The API field names are Turkish. Example `POST /api/triage` request:
 
 ```json
 {
   "demografi": {
-    "isim": "Ayşe Yılmaz",
+    "isim": "Alex Morgan",
     "yas": 34,
     "boy": 165,
     "kilo": 60.5,
@@ -143,7 +144,7 @@ Tüm endpoint’ler `http://localhost:8000` taban adresini kullanır.
     "kimlik_no": "A1234567"
   },
   "tibbi_gecmis": {
-    "kronik_rahatsizlik": "Astım",
+    "kronik_rahatsizlik": "Asthma",
     "surekli_ilac": ""
   },
   "vitaller": {
@@ -155,23 +156,46 @@ Tüm endpoint’ler `http://localhost:8000` taban adresini kullanır.
     "spo2": 98
   },
   "sikayet": {
-    "ana_sikayet": "Boğaz ağrısı",
+    "ana_sikayet": "Sore throat",
     "agri_skalasi": 3
   }
 }
 ```
 
-### Skorları okuma
+Example response (`201 Created`):
 
-- `risk_skoru`, ESI yönünü kullanır: **1 en acil**, **5 en az acil**.
-- `aciliyet_seviyesi`, arayüzde gösterilen ters ölçektir: **1 en düşük**, **5 en yüksek aciliyet**.
-- Renkli durumlar `KIRMIZI`, `SARI` ve `YESIL` değerleridir.
-- 65 yaş ve üzerindeki kişiler için nihai aciliyet seviyesi bir basamak artırılır.
-- API, T.C. kimlik numarası ve pasaport numarasını maskeleyerek döndürür. Gerçek kişisel veya sağlık verilerini herkese açık ortamlara göndermeyin.
+```json
+{
+  "log_id": 12,
+  "sira_no": 7,
+  "tarih": "2026-10-19",
+  "saat": "15:42:10",
+  "hasta_durumu": "YESIL",
+  "risk_skoru": 5,
+  "aciliyet_seviyesi": 1,
+  "onerilen_poliklinik": "Emergency Medicine",
+  "aciklama": "No urgent risk was identified by the rules-based assessment.",
+  "karar_kaynagi": "KURAL",
+  "kodlar": {
+    "demografi_id": 12,
+    "tibbi_gecmis_id": 12,
+    "vitaller_id": 12,
+    "sikayet_id": 12
+  }
+}
+```
 
-## Yerel ML modellerini eğitme (isteğe bağlı)
+### Understanding the scores
 
-Eğitim CSV dosyaları `backend/data/` altında bulunur. Backend klasöründen:
+- `risk_skoru` follows the ESI direction: **1 is most urgent**, **5 is least urgent**.
+- `aciliyet_seviyesi` is the reversed project scale shown in the UI: **1 is least urgent**, **5 is most urgent**.
+- Color-coded statuses are `KIRMIZI` (red), `SARI` (yellow), and `YESIL` (green).
+- For patients aged 65 or older, the final urgency is increased by one level.
+- National ID and passport numbers are masked in API responses. Do not send real personal or health information to public environments.
+
+## Training the local ML models (optional)
+
+Training CSV files are included under `backend/data/`. From the `backend/` directory, run:
 
 ```bash
 python -m app.models.train \
@@ -179,23 +203,23 @@ python -m app.models.train \
   --mtsamples ./data/mtsamples.csv
 ```
 
-Eğitim, sınıflandırma metriklerini yazdırır ve modelleri `backend/model_artifacts/` altına kaydeder. Bu dosyalar `.gitignore` kapsamındadır. Eğitim verilerindeki başarı ölçümleri bağımsız klinik doğrulama anlamına gelmez. Veri kümelerinin kaynakları, lisansları ve model sınırlamaları için [model notlarına](backend/app/models/README.md) bakın.
+Training prints classification metrics and saves the models to `backend/model_artifacts/`. These generated files are ignored by Git. Performance on the source datasets is not independent clinical validation. See the [model notes](backend/app/models/README.md) for dataset sources, licenses, and limitations.
 
-## Proje yapısı
+## Repository structure
 
 ```text
 backend/
-  app/api/       FastAPI endpoint’leri
-  app/core/      Triaj kuralları, LLM bağlantıları ve yapılandırma
-  app/db/        SQLAlchemy modelleri ve veri erişimi
-  app/models/    Veri modelleri ve ML sınıflandırıcıları
-  data/          Model eğitim verileri
-  tests/         Backend testleri
-frontend/        React arayüzü
-database/        Db2 başlangıç şeması ve kurulum betiği
+  app/api/       FastAPI endpoints
+  app/core/      Triage rules, LLM clients, and configuration
+  app/db/        SQLAlchemy models and data access
+  app/models/    Data models and ML classifiers
+  data/          Model training datasets
+  tests/         Backend tests
+frontend/        React web app
+database/        Db2 initialization schema and setup script
 docker-compose.yml
 ```
 
-## Lisans
+## License
 
-Kod [MIT Lisansı](LICENSE) ile dağıtılır. Model eğitim verilerinin kaynak ve lisans bilgileri [model notlarında](backend/app/models/README.md) açıklanmıştır.
+The code is distributed under the [MIT License](LICENSE). Dataset source and license information is documented in the [model notes](backend/app/models/README.md).

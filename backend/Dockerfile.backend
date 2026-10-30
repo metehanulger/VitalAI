@@ -6,15 +6,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends gcc libxml2 \
-    && rm -rf /var/lib/apt/lists/*
-
 RUN pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --extra db2 --extra llm
+RUN uv sync --frozen --no-dev --extra llm
 
+COPY alembic.ini ./
+COPY migrations ./migrations
 COPY app ./app
 
 EXPOSE 8000

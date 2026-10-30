@@ -51,9 +51,15 @@ complaint, pulse, blood pressure, respiratory rate, temperature, SpO2, and pain
 score. Features absent from FedMML, such as height, weight, blood type, and medical
 history, cannot be learned from that dataset. The MTSamples model is trained on
 English clinician transcriptions while the intake is a short patient complaint.
-When the specialty artifact is loaded, the configured LLM translates the complaint
-and brief medical history into English before classification. This adds one short
-LLM call per triage request. Specialty predictions are advisory and are withheld
-from the final LLM context when the top class probability is below 0.30. Validate
+When either artifact is loaded, one short LLM call normalizes the intake: it
+translates the complaint and brief medical history into English and maps the chief
+complaint onto one of the 28 FedMML complaint categories (or none). The urgency
+model receives that category, because FedMML contains only those 28 complaint
+strings and would otherwise ignore free text, especially Turkish. The specialty
+model receives the English text; its labels are mapped onto the configured
+department list, non-clinic labels such as Radiology are dropped, and labels that
+map to the same department are merged. Specialty predictions are advisory and are
+withheld from the final LLM context when the merged probability is below 0.30.
+Without an LLM, both models receive the original text. Validate
 both models on representative, clinician-reviewed data before any use beyond a
 software demonstration.

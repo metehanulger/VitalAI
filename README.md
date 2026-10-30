@@ -4,12 +4,13 @@
 
 **Collect patient intake details, estimate urgency, and manage the daily triage queue.**
 
-React · FastAPI · SQLite, PostgreSQL, or IBM Db2
+React · FastAPI · PostgreSQL
 
 </div>
 
 <p align="center">
   <a href="#overview">Overview</a> ·
+  <a href="#how-a-triage-decision-is-made">Decision flow</a> ·
   <a href="#features">Features</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#configuration">Configuration</a> ·
@@ -25,14 +26,25 @@ Each result includes a color-coded status, an urgency score from 1 to 5, a sugge
 
 > **Clinical use notice:** This project is for education and software demonstration only. It is not intended for diagnosis or treatment, has not been clinically validated, and does not replace assessment by a qualified healthcare professional.
 
+## How a triage decision is made
+
+1. **Rules.** The backend calculates NEWS2 from the vital signs, including ACVPU consciousness and supplemental oxygen. It also checks the complaint for critical and urgent symptoms in Turkish and English, and ignores symptoms the patient denies, such as "göğüs ağrısı yok". The result is a minimum color category that nothing later can lower.
+2. **Complaint normalization.** When the ML models are available, one short LLM call translates the complaint into English and maps it onto one of the 28 complaint categories the urgency model was trained on.
+3. **Two ML models.** The urgency model (FedMML) predicts a 1 to 5 urgency level. The specialty model (MTSamples) suggests departments, which are mapped onto the hospital's department list.
+4. **LLM decision.** The LLM receives the four intake cards, the NEWS2 score, the ML signals, and the disease-to-department reference table. It answers in a fixed JSON schema and may choose only listed departments.
+5. **Safety merge.** The final category is the most urgent of the rules and the LLM, so the AI can raise urgency but never lower it. Patients older than 64 are raised by one level.
+6. **Fallbacks.** If an LLM model fails, the next configured Gemini model is tried. If no LLM answers, the rules decide the category and a keyword router picks the department.
+
 ## Features
 
 - Four-part patient intake: demographics, medical history, vital signs, and chief complaint
-- Rules-based prioritization using NEWS2 and critical-symptom checks
-- Optional OpenAI-compatible API, Google Gemini, or IBM watsonx.ai integration
+- Rules-based prioritization using NEWS2 (including ACVPU consciousness and supplemental oxygen) and Turkish and English symptom checks that ignore denied symptoms
+- Department routing from a closed, configurable department list, with keyword routing when no LLM is available
+- Optional OpenAI-compatible API, Google Gemini, or IBM watsonx.ai integration, with structured JSON output and automatic Gemini model fallback
 - Optional local classifiers trainable with the FedMML and MTSamples datasets
-- Daily patient queue, saved-record history, and triage details
-- SQLite for local development, configurable PostgreSQL, and Db2 in the Docker Compose setup
+- Daily patient queue, paginated record history, and triage details with key findings, early-warning notes, and alternative departments
+- Evaluation script for under-triage, over-triage, and department accuracy on labeled cases
+- PostgreSQL storage for local development and the Docker Compose setup
 - Turkish national ID and passport validation; ID numbers are masked in API responses
 
 ## Technology stack
@@ -41,7 +53,7 @@ Each result includes a color-coded status, an urgency score from 1 to 5, a sugge
 |---|---|
 | Web app | React 18, Vite, Tailwind CSS |
 | API | Python 3.12, FastAPI, Pydantic |
-| Database | SQLite (local default), PostgreSQL, IBM Db2 (Compose configuration) |
+| Database | PostgreSQL 17 (psycopg 3 driver, SQLAlchemy 2) |
 | Machine learning | pandas, scikit-learn, joblib |
 | LLM providers | OpenAI-compatible REST API, Google Gemini, IBM watsonx.ai |
 
@@ -52,9 +64,19 @@ Each result includes a color-coded status, an urgency score from 1 to 5, a sugge
 - Python 3.12 (64-bit recommended)
 - Node.js and npm
 - Git
-- Optional: Docker Desktop (for Db2 with Docker Compose)
+- PostgreSQL 14 or newer, or Docker Desktop to run PostgreSQL with Docker Compose
 
-### 1. Start the backend
+### 1. Start PostgreSQL
+
+The easiest option is to start only the database container from the repository root:
+
+```bash
+docker compose up -d postgres
+```
+
+This creates the `triajdb` database with user `triaj` and password `triaj_sifre`. The backend builds the schema itself when it starts. To use your own PostgreSQL server instead, create a database and set `DATABASE_URL` in `backend/.env`.
+
+### 2. Start the backend
 
 On Windows, in PowerShell from the repository root:
 
@@ -79,11 +101,11 @@ uv sync --group dev
 uv run uvicorn app.main:app --reload
 ```
 
-The local default database is SQLite, so no separate database server is needed. Tables are created automatically when the backend starts. The API is available at `http://localhost:8000`; interactive API documentation is at `http://localhost:8000/docs`.
+The backend connects to `postgresql+psycopg://triaj:triaj_sifre@localhost:5432/triajdb` by default. On startup it applies the Alembic migrations, which create the tables and load the disease-to-clinic reference data. It also loads the local ML models at startup, so the first triage request is not slowed down. The API is available at `http://localhost:8000`; interactive API documentation is at `http://localhost:8000/docs`.
 
 > If PowerShell blocks virtual environment activation, run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` in that terminal, then retry the activation command.
 
-### 2. Start the web app
+### 3. Start the web app
 
 Open a second terminal at the repository root:
 
@@ -97,20 +119,27 @@ Vite usually serves the app at `http://localhost:5173` and proxies `/api` reques
 
 ## Configuration
 
-The application reads settings from a `.env` file in the repository root or in `backend/`. Use `backend/.env.example` as a starting point. Local development uses SQLite and needs no separate database server.
+The application reads settings from a `.env` file in the repository root or in `backend/`. Use `backend/.env.example` as a starting point.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | SQLAlchemy connection URL. The local default is `sqlite:///./triaj.db`. |
+| `DATABASE_URL` | PostgreSQL SQLAlchemy URL. The default is `postgresql+psycopg://triaj:triaj_sifre@localhost:5432/triajdb`. Other database engines are rejected at startup. |
+| `DB_AUTO_MIGRATE` | Apply Alembic migrations on startup (default `true`). Set `false` to run `uv run alembic upgrade head` yourself. |
+| `DB_POOL_SIZE` / `DB_MAX_OVERFLOW` | SQLAlchemy connection pool size (defaults: 5 and 10). |
 | `LLM_PROVIDER` | `openai_compatible`, `gemini`, or `watsonx` |
 | `LLM_API_KEY` | API key for an OpenAI-compatible provider |
 | `LLM_BASE_URL` | OpenAI-compatible API base URL; defaults to `https://api.openai.com/v1` |
 | `LLM_MODEL` | Model name for the OpenAI-compatible provider |
-| `GEMINI_API_KEY` | API key when using Gemini |
+| `LLM_TIMEOUT_SECONDS` | Request timeout for the main triage call (default 30) |
+| `LLM_TRANSLATION_TIMEOUT_SECONDS` | Shorter timeout for the complaint normalization call that feeds both ML models (default 15) |
+| `POLIKLINIKLER` | Comma-separated English department names the triage may recommend. Empty uses the default list in `backend/app/core/poliklinikler.py`. Emergency Medicine is always included. |
+| `GEMINI_API_KEY` / `GEMINI_MODEL` | API key and model when using Gemini (google-genai SDK) |
+| `GEMINI_FALLBACK_MODELS` | Comma-separated Gemini models tried in order when the primary model fails because of quota, unavailability, or a timeout. A failing model is skipped for a while, so later requests go straight to a working one. Free-tier quotas are counted per model. |
+| `GEMINI_TIMEOUT_SECONDS` | Gemini request timeout (default 60). A whole Gemini call, including fallbacks, is capped at 1.5 times this value. |
 | `WATSONX_API_KEY` / `WATSONX_PROJECT_ID` | Credentials when using IBM watsonx.ai |
 | `TRIAGE_URGENCY_MODEL` / `TRIAGE_SPECIALTY_MODEL` | Optional paths to trained local model files |
 
-With no LLM credentials configured, the rules-based assessment remains available, but LLM-generated analysis is disabled. Db2 settings are not needed unless you use the Db2 Compose setup.
+All settings are defined in `backend/app/core/config.py`. Environment variables take priority over `.env` files. With no LLM credentials configured, the rules-based assessment remains available, but LLM-generated analysis is disabled.
 
 To enable Gemini during local development, copy the example file to `backend/.env` before starting the backend and add your own key:
 
@@ -131,12 +160,43 @@ The `uv.lock` file pins the backend dependency graph across supported platforms.
 | Need | Install |
 |---|---|
 | IBM watsonx.ai | `uv sync --extra llm` |
-| PostgreSQL | `uv sync --extra postgres` |
-| IBM Db2 | `uv sync --extra db2` |
 
-The Db2 Docker image installs the Db2 and LLM extras automatically. The basic Windows/SQLite setup does not install optional database drivers.
+The PostgreSQL driver (`psycopg`) is part of the standard install. The backend Docker image also installs the watsonx.ai extra.
 
-### Docker Compose with Db2
+### Running the tests
+
+The tests drop and recreate all tables, so they use a separate database whose name must contain `test`. Create it once, then run the tests from `backend/`:
+
+```bash
+docker compose exec postgres createdb -U triaj triajdb_test
+uv run pytest
+```
+
+Set `TEST_DATABASE_URL` to use a different test database. The default is `postgresql+psycopg://triaj:triaj_sifre@localhost:5432/triajdb_test`.
+
+### Evaluating triage quality
+
+`backend/app/evaluation/degerlendir.py` runs labeled cases through the triage engine and reports the under-triage rate, over-triage rate, status accuracy, department top-1 and top-3 accuracy, and how often the LLM answered. Cases use the columns of `backend/evaluation/vakalar_ornek.csv`. That file is only a format sample; its labels are not clinically validated, so replace them with cases labeled by nurses or physicians before drawing conclusions. From `backend/`:
+
+```bash
+uv run python -m app.evaluation.degerlendir --vakalar evaluation/vakalar_ornek.csv --llm-yok
+uv run python -m app.evaluation.degerlendir --vakalar evaluation/vakalar_ornek.csv --bekleme 30 --cikti sonuclar.csv
+```
+
+`--llm-yok` evaluates the rules and ML models only. `--bekleme` waits between cases to stay within rate limits; each case makes up to two LLM calls.
+
+### Changing the database schema
+
+The SQLAlchemy models in `backend/app/db/tables.py` define the schema. After changing a model, generate and review a migration from `backend/`:
+
+```bash
+uv run alembic revision --autogenerate -m "describe the change"
+uv run alembic upgrade head
+```
+
+A test fails if the models and migrations drift apart.
+
+### Docker Compose
 
 From the repository root:
 
@@ -144,7 +204,7 @@ From the repository root:
 docker compose up --build
 ```
 
-Compose starts the backend and IBM Db2. Initial Db2 setup can take several minutes. Compose sets `DATABASE_URL` for the Db2 connection. To remove the persisted Db2 data as well as stop the containers, run `docker compose down -v`.
+Compose starts PostgreSQL, the backend, and the frontend. When the backend starts, it applies the Alembic migrations to create or update the schema. Compose sets `DATABASE_URL` for the backend. Override the credentials with `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`. To remove the persisted PostgreSQL data as well as stop the containers, run `docker compose down -v`.
 
 The frontend is available at `http://localhost:5173`, and the API at `http://localhost:8000`. If you trained local ML models, Compose mounts `backend/model_artifacts/` into the backend container as read-only; without artifacts, the rules-based assessment remains available.
 
@@ -157,7 +217,7 @@ All endpoints use the base URL `http://localhost:8000`.
 | `POST` | `/api/triage` | Create a triage record and return its result (`201`) |
 | `GET` | `/api/triage` | List the daily queue; supports `tarih`, `durum`, and `limit` query parameters |
 | `GET` | `/api/triage/{log_id}` | Get a result and all four intake sections |
-| `GET` | `/api/triage/history` | List saved records |
+| `GET` | `/api/triage/history` | List saved records, newest first; supports `limit` (default 50, maximum 500) and `offset`. The total count is in the `X-Total-Count` header. |
 | `PATCH` | `/api/triage/{log_id}` | Update a record's color-coded status |
 | `GET` | `/api/triage/secenekler` | Get the form options |
 | `GET` | `/api/health` | Check API and database availability |
@@ -185,7 +245,9 @@ The API field names are Turkish. Example `POST /api/triage` request:
     "tansiyon_diyastolik": 80,
     "solunum": 16,
     "ates": 36.8,
-    "spo2": 98
+    "spo2": 98,
+    "bilinc": "A",
+    "ek_oksijen": false
   },
   "sikayet": {
     "ana_sikayet": "Sore throat",
@@ -205,15 +267,21 @@ Example response (`201 Created`):
   "hasta_durumu": "YESIL",
   "risk_skoru": 5,
   "aciliyet_seviyesi": 1,
-  "onerilen_poliklinik": "Emergency Medicine",
-  "aciklama": "No urgent risk was identified by the rules-based assessment.",
+  "onerilen_poliklinik": "Otolaryngology",
+  "aciklama": "Vital signs are stable; no urgent risk was identified.",
   "karar_kaynagi": "KURAL",
   "kodlar": {
     "demografi_id": 12,
     "tibbi_gecmis_id": 12,
     "vitaller_id": 12,
     "sikayet_id": 12
-  }
+  },
+  "kritik_bulgu": "Vital signs are stable; no urgent risk was identified.",
+  "erken_uyari_notu": "Model-based triage was unavailable; a nurse or physician must review this result.",
+  "news2_skoru": 0,
+  "birim_uyumluluk_siralamasi": [
+    {"birim": "Otolaryngology", "uyum_skoru": 1.0, "gerekce": "Matched the reported symptoms."}
+  ]
 }
 ```
 
@@ -223,6 +291,8 @@ Example response (`201 Created`):
 - `aciliyet_seviyesi` is the reversed project scale shown in the UI: **1 is least urgent**, **5 is most urgent**.
 - Color-coded statuses are `KIRMIZI` (red), `SARI` (yellow), and `YESIL` (green).
 - For patients aged 65 or older, the final urgency is increased by one level.
+- `bilinc` is the ACVPU consciousness level: `A` alert, `C` new confusion, `V` responds to voice, `P` responds to pain, `U` unresponsive. `P` and `U` always give `KIRMIZI`. `ek_oksijen` marks supplemental oxygen. Both default to a normal value when omitted.
+- A manual status change with `PATCH` also moves `risk_skoru` into the new status's range, so the queue order follows the staff decision.
 - National ID and passport numbers are masked in API responses. Do not send real personal or health information to public environments.
 
 ## Training the local ML models (optional)
@@ -243,16 +313,29 @@ Training prints classification metrics and saves the models to `backend/model_ar
 backend/
   app/api/       FastAPI endpoints
   app/core/      Triage rules, LLM clients, and configuration
-  app/db/        SQLAlchemy models and data access
+  app/db/        SQLAlchemy models (the schema definition) and data access
   app/models/    Data models and ML classifiers
+  app/evaluation/ Triage quality evaluation script
+  migrations/    Alembic database migrations
+  evaluation/    Example labeled-case file for the evaluation script
   pyproject.toml Python dependency and optional integration definitions
   uv.lock        Locked Python dependency versions
   data/          Model training datasets
   tests/         Backend tests
 frontend/        React web app and its Docker/nginx configuration
-database/        Db2 initialization schema and setup script
 docker-compose.yml
 ```
+
+## Latest changes
+
+- **PostgreSQL only.** IBM Db2 and SQLite were removed. Alembic migrations now build the schema and load the reference data, and database limits match the form limits, so critical values such as SpO2 35% are stored instead of rejected.
+- **Reliable queue numbers.** A PostgreSQL advisory lock gives concurrent registrations distinct, consecutive queue numbers without retries.
+- **Better decisions.** The LLM now sees the diastolic pressure, which was previously missing from its input, along with the NEWS2 score and the reference table. Its output is validated against a fixed schema and a closed department list.
+- **Working ML signals.** The urgency model receives the mapped complaint category instead of untranslated text it could not read, and the specialty model's labels are mapped onto real departments.
+- **Safer rules.** Denied symptoms are ignored, Turkish word forms are recognized, stroke signs and airway swelling are caught, and false matches such as "burnum" (my nose) for "burn" are avoided. NEWS2 now includes consciousness and supplemental oxygen.
+- **Resilient LLM use.** The client uses the google-genai SDK, reuses provider clients, falls back across Gemini models, and skips a failing model for a while.
+- **Faster and leaner.** ML models load at startup, urgency scoring is about four times faster, history is paginated, and the health check no longer counts every record.
+- **More useful results.** The API and the web app show key findings, early-warning notes, NEWS2, and alternative departments.
 
 ## License
 

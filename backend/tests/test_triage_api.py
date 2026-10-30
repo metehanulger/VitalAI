@@ -100,7 +100,7 @@ def test_yapay_zeka_yalnizca_yukseltebilir(client, istek, monkeypatch):
         {"durum": "KIRMIZI", "risk_skoru": 1, "aciklama": "Klinik tablo ağır."},
         {"durum": "YESIL", "risk_skoru": 5, "aciklama": "Hafif."},
     ])
-    monkeypatch.setattr(triage.llm_client, "generate", lambda *_args: next(ai_outputs))
+    monkeypatch.setattr(triage.llm_client, "generate", lambda *_args, **_kwargs: next(ai_outputs))
     veri = client.post("/api/triage", json=istek).json()
     assert veri["hasta_durumu"] == "KIRMIZI"
     assert veri["karar_kaynagi"].endswith("+KURAL")

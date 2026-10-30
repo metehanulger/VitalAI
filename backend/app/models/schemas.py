@@ -37,6 +37,8 @@ class KimlikTuru(str, Enum):
 
 
 KanGrubu = Literal["A+", "A-", "B+", "B-", "AB+", "AB-", "0+", "0-", "BILINMIYOR"]
+# ACVPU: Alert, new Confusion, responds to Voice, responds to Pain, Unresponsive
+BilincDuzeyi = Literal["A", "C", "V", "P", "U"]
 KararKaynagi = str
 
 
@@ -120,6 +122,13 @@ class VitallerIn(_Girdi):
     solunum: int = Field(ge=4, le=80, description="breaths/min")
     ates: float = Field(ge=25, le=45, description="°C")
     spo2: int = Field(ge=30, le=100, description="%")
+    bilinc: BilincDuzeyi = Field(default="A", description="ACVPU consciousness level")
+    ek_oksijen: bool = Field(default=False, description="Patient is receiving supplemental oxygen")
+
+    @field_validator("bilinc", mode="before")
+    @classmethod
+    def _bilinc_normalize(cls, v):
+        return v.strip().upper() if isinstance(v, str) else v
 
     @model_validator(mode="after")
     def _tansiyon_kontrol(self):
@@ -173,6 +182,14 @@ class TriajKodlari(BaseModel):
     sikayet_id: int
 
 
+class BirimUyum(BaseModel):
+    """One recommended department with its compatibility score and rationale."""
+
+    birim: str
+    uyum_skoru: float
+    gerekce: str = ""
+
+
 class TriajSonuc(BaseModel):
     """POST /api/triage response displayed on the result screen."""
 
@@ -188,6 +205,10 @@ class TriajSonuc(BaseModel):
     aciklama: str | None
     karar_kaynagi: KararKaynagi
     kodlar: TriajKodlari
+    kritik_bulgu: str | None = None
+    erken_uyari_notu: str | None = None
+    news2_skoru: int | None = None
+    birim_uyumluluk_siralamasi: list[BirimUyum] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod
@@ -206,6 +227,12 @@ class TriajSonuc(BaseModel):
             "onerilen_poliklinik": value.onerilen_poliklinik,
             "aciklama": value.aciklama,
             "karar_kaynagi": value.karar_kaynagi,
+            "kritik_bulgu": value.kritik_bulgu,
+            "erken_uyari_notu": value.erken_uyari_notu,
+            "news2_skoru": value.news2_skoru,
+            "birim_uyumluluk_siralamasi": [
+                b for b in (value.birim_uyumluluk_json or []) if isinstance(b, dict) and b.get("birim")
+            ],
             "kodlar": {
                 "demografi_id": value.demografi_id,
                 "tibbi_gecmis_id": value.tibbi_gecmis_id,

@@ -1,7 +1,7 @@
 from datetime import date
 from typing import get_args
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.orm import Session
 
 from app.core.config import yerel_simdi
@@ -29,7 +29,8 @@ def _mask_full_name(name: str) -> str:
 @router.post("", response_model=TriajSonuc, status_code=201)
 def triaj_olustur(istek: TriajIstek, db: Session = Depends(get_db)):
     """Accept the four triage cards, determine urgency, and save the record."""
-    karar = triaj_karari_ver(istek)
+    referanslar = crud.ml_egitim_veri_setini_getir(db, limit=500)
+    karar = triaj_karari_ver(istek, referanslar)
     return crud.triaj_kaydi_olustur(db, istek, karar, yerel_simdi())
 
 
@@ -72,9 +73,18 @@ def secenekler():
 
 
 @router.get("/history", response_model=list[TriajDetay])
-def tum_kayitlar(db: Session = Depends(get_db)):
-    """Return all saved triage records with their complete intake cards."""
-    return crud.tum_triaj_kayitlarini_getir(db)
+def tum_kayitlar(
+    response: Response,
+    limit: int = Query(default=50, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Return one page of saved triage records, newest first, with their intake cards.
+
+    The total number of records is returned in the X-Total-Count header.
+    """
+    response.headers["X-Total-Count"] = str(crud.triaj_kayit_sayisi(db))
+    return crud.tum_triaj_kayitlarini_getir(db, limit=limit, offset=offset)
 
 
 def _log_bul(log_id: int, db: Session):

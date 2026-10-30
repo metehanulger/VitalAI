@@ -16,25 +16,33 @@ const urgencyLabels = {
   1: 'Not urgent',
 };
 
+const PAGE_SIZE = 50;
+
 const displayValue = (value) => value === null || value === undefined || value === '' ? 'Not recorded' : value;
 
 export default function PatientHistory() {
   const [records, setRecords] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(0);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
 
+    // Fetch one page at a time; the 30-second refresh reloads the current page.
     const loadHistory = async () => {
       try {
-        const response = await fetch('/api/triage/history');
+        const response = await fetch(`/api/triage/history?limit=${PAGE_SIZE}&offset=${page * PAGE_SIZE}`);
         const result = await response.json();
         if (!response.ok) {
           throw new Error(result.detail || `Request failed (${response.status}).`);
         }
         if (isMounted) {
-          setRecords(Array.isArray(result) ? result : []);
+          const list = Array.isArray(result) ? result : [];
+          const total = Number(response.headers.get('X-Total-Count'));
+          setRecords(list);
+          setTotalCount(Number.isFinite(total) ? total : list.length);
           setError('');
           setIsLoading(false);
         }
@@ -52,7 +60,7 @@ export default function PatientHistory() {
       isMounted = false;
       clearInterval(refreshTimer);
     };
-  }, []);
+  }, [page]);
 
   return (
     <div className="p-6 flex flex-col items-center min-h-screen">
@@ -60,7 +68,7 @@ export default function PatientHistory() {
         <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
           <h2 className="text-2xl font-semibold text-slate-800">Patient History</h2>
           <span className="px-4 py-2 bg-slate-100 rounded-xl text-slate-700 font-semibold">
-            Saved records: {records.length}
+            Saved records: {totalCount}
           </span>
         </div>
 
@@ -148,13 +156,17 @@ export default function PatientHistory() {
                                     <p>Blood pressure: {vitals.tansiyon_sistolik}/{vitals.tansiyon_diastolik} mmHg</p>
                                     <p>Respiration rate: {vitals.solunum} breaths/min</p>
                                     <p>Temperature: {vitals.ates} °C</p>
-                                    <p>SpO2: {vitals.spo2}%</p>
+                                    <p>SpO2: {vitals.spo2}%{vitals.ek_oksijen ? ' (on supplemental oxygen)' : ''}</p>
+                                    <p>Consciousness (ACVPU): {vitals.bilinc || 'A'}</p>
                                   </section>
                                   <section className="rounded-xl bg-slate-50 p-4">
                                     <h4 className="font-semibold text-slate-800">Triage Result</h4>
                                     <p>Urgency: {urgency}/5 · {urgencyLabels[urgency] || 'Unknown'}</p>
                                     <p>Department: {displayValue(record.onerilen_poliklinik)}</p>
                                     <p>Pain score: {complaint.agri_skalasi}/10</p>
+                                    <p>NEWS2: {displayValue(record.news2_skoru)}</p>
+                                    <p>Key finding: {displayValue(record.kritik_bulgu)}</p>
+                                    <p>Early warning: {displayValue(record.erken_uyari_notu)}</p>
                                     <p>Explanation: {displayValue(record.aciklama)}</p>
                                   </section>
                                 </div>
@@ -168,6 +180,30 @@ export default function PatientHistory() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {totalCount > PAGE_SIZE && (
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-4">
+            <button
+              type="button"
+              className="rounded-xl bg-slate-100 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
+              onClick={() => setPage((current) => Math.max(current - 1, 0))}
+              disabled={page === 0}
+            >
+              Newer
+            </button>
+            <span className="text-sm text-slate-500">
+              Records {page * PAGE_SIZE + 1}–{page * PAGE_SIZE + records.length} of {totalCount}
+            </span>
+            <button
+              type="button"
+              className="rounded-xl bg-slate-100 px-4 py-2 font-semibold text-slate-700 disabled:opacity-40"
+              onClick={() => setPage((current) => current + 1)}
+              disabled={(page + 1) * PAGE_SIZE >= totalCount}
+            >
+              Older
+            </button>
           </div>
         )}
       </div>

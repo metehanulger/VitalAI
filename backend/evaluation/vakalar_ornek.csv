@@ -1,0 +1,11 @@
+vaka_id,yas,kronik_rahatsizlik,surekli_ilac,nabiz,tansiyon_sistolik,tansiyon_diastolik,solunum,ates,spo2,bilinc,ek_oksijen,ana_sikayet,agri_skalasi,beklenen_durum,beklenen_poliklinik,etiketleyen
+ornek-01,34,,,84,122,78,16,37.2,98,A,hayir,Üç gündür idrar yaparken yanma ve sık idrara çıkma,3,YESIL,Urology,ornek-dogrulanmamis
+ornek-02,67,Hipertansiyon,,102,158,92,20,36.9,96,A,hayir,"Yarım saattir göğsümde baskı var, sol koluma ve çeneme yayılıyor, terliyorum",7,SARI,Cardiology,ornek-dogrulanmamis
+ornek-03,72,Diyabet,,88,182,98,18,36.8,96,A,hayir,"Bir saattir sağ kolum ve bacağım güçsüz, konuşmam peltekleşti",2,SARI,Neurology,ornek-dogrulanmamis
+ornek-04,25,,,100,124,80,18,38.3,98,A,hayir,"Sağ alt karnımda 10 saattir artan ağrı, bulantı ve ateşim var",7,SARI,General Surgery,ornek-dogrulanmamis
+ornek-05,45,,,76,124,80,16,36.9,99,A,hayir,"Göğüs ağrım yok, iki gündür burnum akıyor ve hapşırıyorum",1,YESIL,Otolaryngology,ornek-dogrulanmamis
+ornek-06,58,Diyabet,,90,146,88,16,36.8,98,A,hayir,"Sol gözümde bulanık görme ve ağrı var, ışıkların etrafında halka görüyorum",6,SARI,Ophthalmology,ornek-dogrulanmamis
+ornek-07,30,,,92,128,82,16,36.8,99,A,hayir,"Merdivenden düştüm, sol bileğim şişti ve hareket ettiremiyorum",7,SARI,Orthopedics and Traumatology,ornek-dogrulanmamis
+ornek-08,40,,,124,88,54,26,36.9,91,A,hayir,"Arı soktu, dudaklarım ve dilim şişiyor, nefesim daralıyor",6,KIRMIZI,Emergency Medicine,ornek-dogrulanmamis
+ornek-09,80,KOAH,Salbutamol,104,110,70,24,37.9,92,C,evet,"Sabahtan beri uykulu ve konfüze, öksürüğü artmış",3,KIRMIZI,Emergency Medicine,ornek-dogrulanmamis
+ornek-10,22,,,78,118,76,14,36.7,99,A,hayir,"Kollarımda iki gündür kaşıntılı döküntü var",2,YESIL,Dermatology,ornek-dogrulanmamis

@@ -17,7 +17,8 @@ export default function TriageBentoBox() {
   });
 
   const [vitals, setVitals] = useState({
-    pulse: '', systolicBP: '', diastolicBP: '', respiration: '', temperature: '', spO2: ''
+    pulse: '', systolicBP: '', diastolicBP: '', respiration: '', temperature: '', spO2: '',
+    consciousness: 'A', supplementalOxygen: false
   });
 
   const [complaint, setComplaint] = useState({
@@ -85,6 +86,8 @@ export default function TriageBentoBox() {
         solunum: Number(vitals.respiration),
         ates: Number(vitals.temperature),
         spo2: Number(vitals.spO2),
+        bilinc: vitals.consciousness,
+        ek_oksijen: vitals.supplementalOxygen,
       },
       sikayet: {
         ana_sikayet: complaint.mainComplaint.trim(),
@@ -112,6 +115,7 @@ export default function TriageBentoBox() {
           tibbi_gecmis: 'Medical History', kronik_rahatsizlik: 'Chronic Illnesses', surekli_ilac: 'Regular Medications',
           vitaller: 'Current Vitals', nabiz: 'Heart Rate', tansiyon_sistolik: 'Systolic Blood Pressure',
           tansiyon_diastolik: 'Diastolic Blood Pressure', solunum: 'Respiration Rate', ates: 'Temperature', spo2: 'Oxygen Saturation',
+          bilinc: 'Consciousness', ek_oksijen: 'Supplemental Oxygen',
           sikayet: 'Clinical Complaint', ana_sikayet: 'Main Complaint', agri_skalasi: 'Pain Scale',
         };
         const detail = Array.isArray(result.detail)
@@ -161,6 +165,12 @@ export default function TriageBentoBox() {
         priorityLabel: urgencyLabels[urgency] || statusLabels[result.hasta_durumu] || result.hasta_durumu,
         recommendedPolyclinic: department.split(/\s*\/\s*/).map(name => departmentLabels[name] || name).join(' / '),
         reasoning: result.aciklama || 'No explanation was returned.',
+        keyFinding: result.kritik_bulgu || '',
+        earlyWarning: result.erken_uyari_notu || '',
+        news2: result.news2_skoru,
+        alternatives: (result.birim_uyumluluk_siralamasi || [])
+          .filter(item => item.birim && item.birim !== result.onerilen_poliklinik)
+          .slice(0, 2),
         status: statusLabels[result.hasta_durumu] || result.hasta_durumu,
         source: decisionSource,
         logId: result.log_id,
@@ -261,6 +271,20 @@ export default function TriageBentoBox() {
                 <input type="number" placeholder="Respiration Rate" disabled={isLocked} className="border p-3 rounded-xl w-full disabled:bg-slate-50"
                   onChange={e => setVitals({...vitals, respiration: e.target.value})} />
               </div>
+              <label className="text-xs font-medium text-slate-500 -mb-2">Consciousness (ACVPU)</label>
+              <select value={vitals.consciousness} disabled={isLocked} className="border p-3 rounded-xl w-full disabled:bg-slate-50"
+                onChange={e => setVitals({...vitals, consciousness: e.target.value})}>
+                <option value="A">A · Alert</option>
+                <option value="C">C · New confusion</option>
+                <option value="V">V · Responds to voice</option>
+                <option value="P">P · Responds to pain only</option>
+                <option value="U">U · Unresponsive</option>
+              </select>
+              <label className="flex items-center gap-3 border p-3 rounded-xl cursor-pointer select-none">
+                <input type="checkbox" checked={vitals.supplementalOxygen} disabled={isLocked} className="w-5 h-5 accent-red-500"
+                  onChange={e => setVitals({...vitals, supplementalOxygen: e.target.checked})} />
+                <span className="text-slate-700">On supplemental oxygen</span>
+              </label>
             </div>
           </div>
 
@@ -282,7 +306,7 @@ export default function TriageBentoBox() {
               <Tooltip
                 id="complaintInfo"
                 title="Complaint"
-                content="Describe the patient's symptoms in English. Include when they began and any important accompanying symptoms."
+                content="Describe the patient's symptoms in Turkish or English. Include when they began, any important accompanying symptoms, and symptoms the patient denies (for example: göğüs ağrısı yok)."
               />
             </div>
             <div className="flex flex-col gap-6 flex-grow">
@@ -363,6 +387,21 @@ export default function TriageBentoBox() {
 
             </div>
 
+            <div className="grid gap-4 md:grid-cols-2 mb-6">
+              {analysisResult.keyFinding && (
+                <div className="bg-slate-800/50 p-4 rounded-xl">
+                  <span className="block text-xs text-slate-400 uppercase tracking-wider mb-1">Key Finding</span>
+                  <p className="text-slate-200">{analysisResult.keyFinding}</p>
+                </div>
+              )}
+              {analysisResult.earlyWarning && (
+                <div className="bg-amber-500/10 border border-amber-500/40 p-4 rounded-xl">
+                  <span className="block text-xs text-amber-300 uppercase tracking-wider mb-1">Early Warning</span>
+                  <p className="text-amber-100">{analysisResult.earlyWarning}</p>
+                </div>
+              )}
+            </div>
+
             <div>
               <span className="block text-sm text-slate-400 uppercase tracking-wider mb-2">Explanation</span>
               <p className="text-slate-300 text-base leading-relaxed bg-slate-800/50 p-4 rounded-xl">
@@ -370,8 +409,20 @@ export default function TriageBentoBox() {
               </p>
             </div>
 
+            {analysisResult.alternatives.length > 0 && (
+              <div className="mt-4 text-sm text-slate-400">
+                Alternative departments:{' '}
+                {analysisResult.alternatives
+                  .map(item => `${item.birim} (${Math.round(Number(item.uyum_skoru) * 100)}%)`)
+                  .join(', ')}
+              </div>
+            )}
+
             <div className="mt-6 flex justify-between text-sm text-slate-400">
-              <span>Record #{analysisResult.logId} · This analysis has been saved.</span>
+              <span>
+                Record #{analysisResult.logId} · This analysis has been saved.
+                {analysisResult.news2 !== null && analysisResult.news2 !== undefined && ` · NEWS2: ${analysisResult.news2}`}
+              </span>
               <span>Urgency scale: 1 = not urgent, 5 = very urgent</span>
             </div>
           </div>

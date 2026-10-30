@@ -1,37 +1,25 @@
 # Başlatma: docker compose up --build
-# Arayüz http://localhost:5173 adresinde açılır. İlk DB2 kurulumu birkaç dakika sürebilir.
+# Arayüz http://localhost:5173 adresinde açılır.
 services:
-  db2:
-    image: icr.io/db2_community/db2:11.5.9.0
-    container_name: triaj-db2
-    privileged: true
+  postgres:
+    image: postgres:17.5-alpine
+    container_name: triaj-postgres
     environment:
-      LICENSE: accept
-      DB2INSTANCE: db2inst1
-      DB2INST1_PASSWORD: ${DB2_PASSWORD:-triaj_db2_sifre}
-      DBNAME: ${DB2_DBNAME:-TRIAJDB}
-      BLU: "false"
-      ENABLE_ORACLE_COMPATIBILITY: "false"
-      UPDATEAVAIL: "NO"
-      TO_CREATE_SAMPLEDB: "false"
-      REPODB: "false"
-      IS_OSXFS: "false"
-      PERSISTENT_HOME: "true"
-      HADR_ENABLED: "false"
+      POSTGRES_USER: ${POSTGRES_USER:-triaj}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-triaj_sifre}
+      POSTGRES_DB: ${POSTGRES_DB:-triajdb}
+      TZ: Europe/Istanbul
     ports:
-      - "50000:50000"
+      - "5432:5432"
     volumes:
-      - db2-data:/database
-      - ./database/init.sql:/opt/triaj/init.sql:ro
-      # Kurulum bitince /var/custom altındaki betikler çalışır -> init.sql uygulanır
-      - ./database/db2-init.sh:/var/custom/db2-init.sh:ro
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      # Bağlantı ve temel triaj tabloları kullanılabilir durumdaysa sağlıklı
-      test: ["CMD-SHELL", "su - db2inst1 -c \"db2 connect to $${DBNAME} >/dev/null && db2 'SELECT COUNT(*) FROM HASTANE_LOG' >/dev/null && db2 'SELECT COUNT(*) FROM HASTA_DEMOGRAFI' >/dev/null && db2 'SELECT COUNT(*) FROM TIBBI_GECMIS' >/dev/null && db2 'SELECT COUNT(*) FROM ANLIK_VITALLER' >/dev/null && db2 'SELECT COUNT(*) FROM HASTA_SIKAYET' >/dev/null\""]
-      interval: 30s
-      timeout: 30s
-      retries: 30
-      start_period: 300s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
 
   backend:
     build:
@@ -42,16 +30,16 @@ services:
       - path: ./backend/.env
         required: false
     environment:
-      DATABASE_URL: db2+ibm_db://db2inst1:${DB2_PASSWORD:-triaj_db2_sifre}@db2:50000/${DB2_DBNAME:-TRIAJDB}
-      # Şemayı database/init.sql kurar
-      DB_AUTO_CREATE: "false"
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-triaj}:${POSTGRES_PASSWORD:-triaj_sifre}@postgres:5432/${POSTGRES_DB:-triajdb}
+      # Backend açılışta Alembic migration'larını uygular (şema + referans verisi)
+      DB_AUTO_MIGRATE: "true"
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:3000}
     ports:
       - "8000:8000"
     volumes:
       - ./backend/model_artifacts:/app/model_artifacts:ro
     depends_on:
-      db2:
+      postgres:
         condition: service_healthy
     restart: unless-stopped
 
@@ -68,4 +56,4 @@ services:
     restart: unless-stopped
 
 volumes:
-  db2-data:
+  postgres-data:

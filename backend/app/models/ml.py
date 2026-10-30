@@ -28,6 +28,19 @@ CATEGORICAL_FEATURES = ["blood_type"]
 TEXT_FEATURES = ["chief_complaint", "chronic_conditions", "regular_medications"]
 FEATURE_COLUMNS = list(MODEL_FIELDS)
 
+# The FedMML training data contains only these chief-complaint strings. The urgency
+# model's text features therefore recognize a complaint only when it is phrased as
+# one of them, so free-text complaints are first mapped onto this list.
+FEDMML_COMPLAINT_CATEGORIES = (
+    "Back pain", "Cardiac arrest", "Chest pain", "Chronic pain stable", "Cold symptoms",
+    "Cough", "Fever", "Follow-up visit", "Head injury with LOC", "Headache severe",
+    "High fever with confusion", "Laceration requiring sutures", "Massive hemorrhage",
+    "Medication question", "Mild abdominal discomfort", "Minor injury", "Minor rash",
+    "Moderate abdominal pain", "Prescription refill", "Rash", "Seizure ongoing",
+    "Severe abdominal pain", "Severe respiratory distress", "Severe shortness of breath",
+    "Sprain", "Stroke symptoms", "Unresponsive", "Vomiting",
+)
+
 URGENCY_LABELS = {
     1: "Not urgent",
     2: "Low urgency",
@@ -170,12 +183,13 @@ class UrgencyClassifier:
         else:
             values = intake
         frame = _feature_frame([values])
-        level = int(self.pipeline.predict(frame)[0])
+        # One predict_proba pass; RandomForest.predict is the argmax of the same probabilities.
         predicted = self.pipeline.predict_proba(frame)[0]
         probabilities = {
             int(class_id): float(probability)
             for class_id, probability in zip(self.pipeline.classes_, predicted)
         }
+        level = int(self.pipeline.classes_[predicted.argmax()])
         return TriagePrediction(
             urgency_level=level,
             urgency_label=URGENCY_LABELS[level],
@@ -192,7 +206,13 @@ class UrgencyClassifier:
     def load(cls, path: str) -> "UrgencyClassifier":
         import joblib
 
-        return cls(joblib.load(path))
+        pipeline = joblib.load(path)
+        # Training uses every core; scoring one patient is faster single-threaded,
+        # because starting a worker pool costs more than evaluating 300 trees.
+        classifier = pipeline.named_steps.get("classifier") if hasattr(pipeline, "named_steps") else None
+        if classifier is not None and hasattr(classifier, "n_jobs"):
+            classifier.n_jobs = 1
+        return cls(pipeline)
 
 
 @dataclass

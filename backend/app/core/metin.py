@@ -7,5 +7,5 @@ def katla(metin: str) -> str:
 
 
 def bayt_kirp(metin: str, azami_bayt: int) -> str:
-    """Truncate text to a UTF-8 byte limit (DB2 VARCHAR length is measured in bytes)."""
+    """Truncate text to a UTF-8 byte limit."""
     return metin.encode("utf-8")[:azami_bayt].decode("utf-8", errors="ignore")

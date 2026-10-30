@@ -1,5 +1,7 @@
-"""SQLAlchemy database models.
-The source schema is database/init.sql, compatible with PostgreSQL and DB2.
+"""SQLAlchemy database models (PostgreSQL).
+These models are the single schema definition; Alembic migrations in
+backend/migrations are generated from them and tests check that both stay in sync.
+CHECK limits mirror the Pydantic input limits in app/models/schemas.py.
 
 Tablo Mimarisi:
 - 4 Kart Tablosu: HastaDemografi, TibbiGecmis, AnlikVitaller, Sikayet
@@ -8,7 +10,12 @@ Tablo Mimarisi:
 """
 
 from datetime import date, time, datetime
-from sqlalchemy import Date, ForeignKey, Index, Integer, Numeric, SmallInteger, String, Time, DateTime, Text, UniqueConstraint
+from typing import Any
+from sqlalchemy import (
+    Boolean, CheckConstraint, Date, DateTime, ForeignKey, Index, Integer, Numeric, SmallInteger, String, Text,
+    Time, UniqueConstraint, false, func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
 
@@ -16,7 +23,12 @@ from app.db.database import Base
 class HastaDemografi(Base):
     """Card 1: Basic demographics."""
     __tablename__ = "hasta_demografi"
-    __table_args__ = (Index("ix_demografi_kimlik", "kimlik_no"),)
+    __table_args__ = (
+        Index("ix_demografi_kimlik", "kimlik_no"),
+        CheckConstraint("yas BETWEEN 0 AND 130", name="ck_demo_yas"),
+        CheckConstraint("boy IS NULL OR boy BETWEEN 20 AND 260", name="ck_demo_boy"),
+        CheckConstraint("kilo IS NULL OR kilo BETWEEN 0.5 AND 400", name="ck_demo_kilo"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     isim: Mapped[str] = mapped_column(String(400), nullable=False)
@@ -26,7 +38,7 @@ class HastaDemografi(Base):
     kan_grubu: Mapped[str] = mapped_column(String(10), default="BILINMIYOR", nullable=False)
     kimlik_turu: Mapped[str] = mapped_column(String(10), default="TC", nullable=False)
     kimlik_no: Mapped[str] = mapped_column(String(64), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     loglar: Mapped[list["HastaneLog"]] = relationship("HastaneLog", back_populates="demografi", cascade="all, delete-orphan")
 
@@ -38,7 +50,7 @@ class TibbiGecmis(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     kronik_rahatsizlik: Mapped[str | None] = mapped_column(String(2000), default="", nullable=True)
     surekli_ilac: Mapped[str | None] = mapped_column(String(2000), default="", nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     loglar: Mapped[list["HastaneLog"]] = relationship("HastaneLog", back_populates="tibbi_gecmis", cascade="all, delete-orphan")
 
@@ -46,6 +58,15 @@ class TibbiGecmis(Base):
 class AnlikVitaller(Base):
     """Card 3: Current vital signs."""
     __tablename__ = "anlik_vitaller"
+    __table_args__ = (
+        CheckConstraint("nabiz BETWEEN 20 AND 300", name="ck_vit_nabiz"),
+        CheckConstraint("tansiyon_sistolik BETWEEN 40 AND 300", name="ck_vit_sistolik"),
+        CheckConstraint("tansiyon_diyastolik BETWEEN 20 AND 200", name="ck_vit_diyastolik"),
+        CheckConstraint("solunum BETWEEN 4 AND 80", name="ck_vit_solunum"),
+        CheckConstraint("ates BETWEEN 25 AND 45", name="ck_vit_ates"),
+        CheckConstraint("spo2 BETWEEN 30 AND 100", name="ck_vit_spo2"),
+        CheckConstraint("bilinc IN ('A', 'C', 'V', 'P', 'U')", name="ck_vit_bilinc"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     nabiz: Mapped[int] = mapped_column(SmallInteger, nullable=False)
@@ -55,7 +76,10 @@ class AnlikVitaller(Base):
     ates: Mapped[float] = mapped_column(Numeric(4, 1, asdecimal=False), default=36.8, nullable=False)
     spo2: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     troponin: Mapped[float | None] = mapped_column(Numeric(6, 3, asdecimal=False), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # ACVPU consciousness level and supplemental oxygen, both used by NEWS2
+    bilinc: Mapped[str] = mapped_column(String(1), default="A", server_default="A", nullable=False)
+    ek_oksijen: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     loglar: Mapped[list["HastaneLog"]] = relationship("HastaneLog", back_populates="vitaller", cascade="all, delete-orphan")
 
@@ -63,11 +87,12 @@ class AnlikVitaller(Base):
 class Sikayet(Base):
     """Card 4: Patient complaint."""
     __tablename__ = "hasta_sikayet"
+    __table_args__ = (CheckConstraint("agri_skalasi BETWEEN 1 AND 10", name="ck_sikayet_agri"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ana_sikayet: Mapped[str] = mapped_column(Text, nullable=False)
     agri_skalasi: Mapped[int] = mapped_column(SmallInteger, default=1, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     loglar: Mapped[list["HastaneLog"]] = relationship("HastaneLog", back_populates="sikayet", cascade="all, delete-orphan")
 
@@ -77,7 +102,12 @@ class HastaneLog(Base):
     __tablename__ = "hastane_log"
     __table_args__ = (
         UniqueConstraint("tarih", "sira_no", name="uq_log_tarih_sira"),
-        Index("ix_log_tarih_durum", "tarih", "durum", "sira_no"),
+        # Daily queue: WHERE tarih = ? ORDER BY risk_skoru, sira_no
+        Index("ix_log_kuyruk", "tarih", "risk_skoru", "sira_no"),
+        # History: ORDER BY tarih DESC, saat DESC, sira_no DESC (read backwards)
+        Index("ix_log_gecmis", "tarih", "saat", "sira_no"),
+        CheckConstraint("risk_skoru BETWEEN 1 AND 5", name="ck_log_risk"),
+        CheckConstraint("durum IN ('KIRMIZI', 'SARI', 'YESIL')", name="ck_log_durum"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -93,7 +123,7 @@ class HastaneLog(Base):
     durum: Mapped[str] = mapped_column(String(20), nullable=False)
     risk_skoru: Mapped[int] = mapped_column(SmallInteger, default=3, nullable=False)
     onerilen_poliklinik: Mapped[str | None] = mapped_column(String(150), nullable=True)
-    birim_uyumluluk_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    birim_uyumluluk_json: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
     kritik_bulgu: Mapped[str | None] = mapped_column(String(1500), nullable=True)
     erken_uyari_notu: Mapped[str | None] = mapped_column(String(1500), nullable=True)
     aciklama: Mapped[str | None] = mapped_column(String(2000), nullable=True)
@@ -101,7 +131,7 @@ class HastaneLog(Base):
     news2_skoru: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
 
     islendi: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     demografi: Mapped[HastaDemografi] = relationship("HastaDemografi", back_populates="loglar", lazy="joined")
     tibbi_gecmis: Mapped[TibbiGecmis] = relationship("TibbiGecmis", back_populates="loglar", lazy="joined")
